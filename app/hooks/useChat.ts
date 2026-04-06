@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Message, Thread } from "../types";
 import { createThread, loadThreads, saveThreads } from "../lib/storage";
-import { callApi } from "../lib/api";
+import { callApi, deleteThread, fetchThreadMessages } from "../lib/api";
 
 export function useChat() {
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -30,6 +30,28 @@ export function useChat() {
   }, [threads, ready]);
 
   useEffect(() => {
+    if (!ready || !currentThreadId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const fromCheckpoint = await fetchThreadMessages(currentThreadId);
+        if (cancelled) return;
+        if (fromCheckpoint.length === 0) return;
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === currentThreadId ? { ...t, messages: fromCheckpoint } : t,
+          ),
+        );
+      } catch {
+        /* keep localStorage copy */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, currentThreadId]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -51,6 +73,25 @@ export function useChat() {
   const handleSelectThread = (id: string) => {
     setCurrentThreadId(id);
     localStorage.setItem("piper_current_thread", id);
+  };
+
+  const handleDeleteThread = (id: string) => {
+    if (streaming) return;
+    void deleteThread(id).catch(() => {});
+
+    const next = threads.filter((t) => t.id !== id);
+    if (next.length === 0) {
+      const t = createThread();
+      setThreads([t]);
+      setCurrentThreadId(t.id);
+      localStorage.setItem("piper_current_thread", t.id);
+      return;
+    }
+    setThreads(next);
+    if (id === currentThreadId) {
+      setCurrentThreadId(next[0].id);
+      localStorage.setItem("piper_current_thread", next[0].id);
+    }
   };
 
   const sendMessage = async () => {
@@ -115,6 +156,7 @@ export function useChat() {
     textareaRef,
     handleNewThread,
     handleSelectThread,
+    handleDeleteThread,
     sendMessage,
     retryMessage,
     handleKeyDown,

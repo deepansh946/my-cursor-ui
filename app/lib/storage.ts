@@ -28,10 +28,12 @@ export function loadThreads(): { threads: Thread[]; currentThreadId: string } {
 }
 
 export function formatDate(ts: number): string {
-  const diff = Date.now() - ts;
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days}d ago`;
-  return new Date(ts).toLocaleDateString();
+  const d = new Date(ts);
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }

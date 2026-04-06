@@ -1,6 +1,6 @@
 "use client";
 
-import { FaCheck, FaSpinner } from "react-icons/fa";
+import { FaSpinner, FaCheck, FaBolt } from "react-icons/fa";
 
 const TOOL_LABELS: Record<string, string> = {
   indexer: "Indexing files",
@@ -9,11 +9,8 @@ const TOOL_LABELS: Record<string, string> = {
   searchCode: "Searching code",
   writeFile: "Writing file",
   runCommand: "Running command",
+  terminal: "Terminal",
 };
-
-function toolLabel(name: string): string {
-  return TOOL_LABELS[name] ?? `Using ${name}`;
-}
 
 export function ToolBlock({
   toolName,
@@ -23,13 +20,30 @@ export function ToolBlock({
   isStreaming: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2 py-1 text-xs text-zinc-500 dark:text-zinc-400">
+    <div
+      className="flex items-center gap-2.5 px-3 py-2 text-xs rounded-md w-fit"
+      style={{
+        background: "var(--bg-muted)",
+        border: "1px solid var(--border)",
+        color: "var(--text-muted)",
+      }}
+    >
+      <FaBolt
+        className="text-[10px] shrink-0"
+        style={{ color: "var(--accent)", opacity: 0.7 }}
+      />
+      <span className="tracking-wide">{TOOL_LABELS[toolName] ?? toolName}</span>
       {isStreaming ? (
-        <FaSpinner className="animate-spin shrink-0" />
+        <FaSpinner
+          className="text-[9px] animate-spin shrink-0"
+          style={{ color: "var(--accent)" }}
+        />
       ) : (
-        <FaCheck className="text-emerald-500 shrink-0" />
+        <FaCheck
+          className="text-[9px] shrink-0"
+          style={{ color: "var(--accent)" }}
+        />
       )}
-      <span>{toolLabel(toolName)}</span>
     </div>
   );
 }

@@ -1,43 +1,94 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg:          #0e0e0e;
+  --bg-subtle:   #111111;
+  --bg-muted:    #171717;
+  --bg-hover:    #1e1e1e;
+  --border:      #242424;
+  --border-dim:  #1a1a1a;
+  --text:        #e2e2e2;
+  --text-muted:  #c8c8c8;
+  --text-dim:    #787878;
+  --accent:      #fb923c;
+  --accent-dim:  rgba(251,146,60,0.12);
+  --accent-glow: rgba(251,146,60,0.05);
+  --error:       #f87171;
+  --error-dim:   rgba(248,113,113,0.1);
+  --success:     #fb923c;
+  --human-bg:    rgba(251,146,60,0.08);
+  --human-border:rgba(251,146,60,0.22);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-roboto);
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --font-sans: var(--font-mono);
+  --font-mono: var(--font-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+* { box-sizing: border-box; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-roboto), sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
 }
 
-.markdown p { margin: 0.25rem 0; }
-.markdown p:first-child { margin-top: 0; }
-.markdown p:last-child { margin-bottom: 0; }
-.markdown h1, .markdown h2, .markdown h3, .markdown h4 { font-weight: 600; margin: 0.75rem 0 0.25rem; }
-.markdown h1 { font-size: 1.25rem; }
-.markdown h2 { font-size: 1.1rem; }
-.markdown h3 { font-size: 1rem; }
-.markdown ul, .markdown ol { padding-left: 1.25rem; margin: 0.25rem 0; }
-.markdown ul { list-style-type: disc; }
-.markdown ol { list-style-type: decimal; }
-.markdown li { margin: 0.15rem 0; }
-.markdown a { text-decoration: underline; opacity: 0.85; }
-.markdown strong { font-weight: 600; }
-.markdown em { font-style: italic; }
-.markdown code { font-family: monospace; font-size: 0.85em; background: rgba(0,0,0,0.08); padding: 0.1em 0.3em; border-radius: 3px; }
-.markdown blockquote { border-left: 3px solid currentColor; padding-left: 0.75rem; opacity: 0.7; margin: 0.5rem 0; }
-.markdown hr { border: none; border-top: 1px solid currentColor; opacity: 0.2; margin: 0.75rem 0; }
+/* Subtle radial glow from bottom */
+body::after {
+  content: "";
+  position: fixed;
+  bottom: -20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 70vw;
+  height: 50vh;
+  background: radial-gradient(ellipse, rgba(251,146,60,0.04) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Message entrance */
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.msg-in { animation: msg-in 0.18s ease-out forwards; }
+
+/* Blinking cursor */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+.cursor-blink { animation: blink 1.2s step-start infinite; }
+
+/* Streaming dots */
+@keyframes sage-pulse {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50%       { opacity: 1;   transform: scale(1); }
+}
+
+/* Markdown styles */
+.markdown p                 { margin: 0.3rem 0; line-height: 1.75; }
+.markdown p:first-child     { margin-top: 0; }
+.markdown p:last-child      { margin-bottom: 0; }
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4                { font-weight: 600; margin: 1rem 0 0.3rem; color: var(--text); }
+.markdown h1                { font-size: 1.15rem; }
+.markdown h2                { font-size: 1.05rem; }
+.markdown h3                { font-size: 0.95rem; }
+.markdown ul, .markdown ol  { padding-left: 1.2rem; margin: 0.3rem 0; }
+.markdown ul                { list-style-type: disc; }
+.markdown ol                { list-style-type: decimal; }
+.markdown li                { margin: 0.2rem 0; }
+.markdown a                 { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.markdown strong            { font-weight: 600; color: var(--text); }
+.markdown em                { font-style: italic; color: var(--text-muted); }
+.markdown code              { font-family: var(--font-mono), monospace; font-size: 0.85em; background: var(--bg-muted); border: 1px solid var(--border); padding: 0.1em 0.35em; border-radius: 3px; color: var(--accent); }
+.markdown blockquote        { border-left: 2px solid var(--accent); padding-left: 0.75rem; color: var(--text-muted); margin: 0.5rem 0; }
+.markdown hr                { border: none; border-top: 1px solid var(--border); margin: 0.75rem 0; }

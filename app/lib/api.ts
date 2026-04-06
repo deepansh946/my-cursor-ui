@@ -1,6 +1,37 @@
 import { Message, MessageType } from "../types";
 import { config } from "./config";
 
+export async function deleteThread(threadId: string): Promise<boolean> {
+  const res = await fetch(
+    `${config.apiBaseUrl}/thread/${encodeURIComponent(threadId)}`,
+    { method: "DELETE" },
+  );
+  return res.ok;
+}
+
+export async function fetchThreadMessages(threadId: string): Promise<Message[]> {
+  const res = await fetch(
+    `${config.apiBaseUrl}/thread/${encodeURIComponent(threadId)}/messages`,
+  );
+  if (!res.ok) return [];
+  const data = (await res.json()) as {
+    messages: Array<{
+      id: string;
+      type: string;
+      content: string;
+      tool_name?: string;
+      subtype?: string;
+    }>;
+  };
+  return (data.messages ?? []).map((m) => ({
+    id: m.id,
+    type: m.type as MessageType,
+    content: m.content,
+    toolName: m.tool_name,
+    subtype: m.subtype,
+  }));
+}
+
 interface CallApiOptions {
   text: string;
   threadId: string;
@@ -49,6 +80,7 @@ export async function callApi({
           content: string;
           node: string;
           tool_name?: string;
+          subtype?: string;
         };
         try {
           chunk = JSON.parse(raw);
@@ -96,6 +128,7 @@ export async function callApi({
                   ? chunk.content
                   : JSON.stringify(chunk.content, null, 2),
               toolName: chunk.tool_name,
+              subtype: chunk.subtype,
             },
           ]);
         }

@@ -16,88 +16,154 @@ export default function Home() {
     textareaRef,
     handleNewThread,
     handleSelectThread,
+    handleDeleteThread,
     sendMessage,
     retryMessage,
     handleKeyDown,
   } = useChat();
 
   return (
-    <div className="flex h-screen bg-white dark:bg-zinc-950">
-      <Sidebar
-        threads={threads}
-        currentThreadId={currentThreadId}
-        onSelect={handleSelectThread}
-        onNew={handleNewThread}
-      />
-      <div className="flex flex-col flex-1 min-w-0">
-        <header className="flex items-center gap-3 border-b border-zinc-200 dark:border-zinc-800 px-6 py-4">
-          <div className="size-8 rounded-full bg-zinc-900 dark:bg-zinc-100 flex items-center justify-center">
-            <span className="text-xs font-bold text-white dark:text-zinc-900">
-              P
-            </span>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              Piper
-            </p>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Coding assistant
-            </p>
-          </div>
-        </header>
+    <div className="flex flex-col h-screen" style={{ background: "var(--bg)" }}>
+      {/* Header — full width */}
+      <header className="flex items-center justify-between px-6 py-3 shrink-0">
+        <div className="flex items-center gap-2">
+          <span
+            className="text-xs font-semibold tracking-[0.25em] uppercase"
+            style={{ color: "var(--accent)" }}
+          >
+            Piper
+          </span>
+          <span
+            className="cursor-blink text-sm font-light"
+            style={{ color: "var(--accent)" }}
+          >
+            _
+          </span>
+        </div>
+        <span
+          className="text-[10px] tracking-[0.2em] uppercase"
+          style={{ color: "var(--text-dim)" }}
+        >
+          coding assistant
+        </span>
+      </header>
 
-        <main className="flex-1 overflow-y-auto py-6 space-y-3">
+      {/* Body — sidebar + content */}
+      <div className="flex flex-1 min-h-0">
+        <Sidebar
+          threads={threads}
+          currentThreadId={currentThreadId}
+          streaming={streaming}
+          onSelect={handleSelectThread}
+          onNew={handleNewThread}
+          onDelete={handleDeleteThread}
+        />
+
+        <div className="flex flex-col flex-1 min-w-0">
+        {/* Messages */}
+        <main className="flex-1 overflow-y-auto py-8 space-y-4">
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full gap-2 text-zinc-400 dark:text-zinc-600">
-              <p className="text-sm">Ask Piper anything about your codebase.</p>
+            <div className="flex flex-col items-center justify-center h-full gap-2">
+              <p
+                className="text-xs tracking-[0.2em] uppercase"
+                style={{ color: "var(--text-dim)" }}
+              >
+                ready
+              </p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                ask piper anything about your codebase
+              </p>
             </div>
           )}
+
           {messages.map((msg, i) => (
-            <ChatMessage
-              key={msg.id}
-              message={msg}
-              onRetry={retryMessage}
-              isStreaming={streaming && i === messages.length - 1}
-            />
+            <div key={msg.id} className="msg-in">
+              <ChatMessage
+                message={msg}
+                onRetry={retryMessage}
+                isStreaming={streaming && i === messages.length - 1}
+              />
+            </div>
           ))}
+
           {streaming && (
-            <div className="flex w-full max-w-2xl mx-auto px-4 justify-start">
-              <div className="flex gap-1 px-4 py-3 rounded-2xl rounded-bl-sm bg-zinc-100 dark:bg-zinc-800">
+            <div className="flex w-full max-w-2xl mx-auto px-6">
+              <div
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full"
+                style={{
+                  background: "var(--bg-muted)",
+                  border: "1px solid var(--border)",
+                }}
+              >
                 {[0, 1, 2].map((i) => (
                   <span
                     key={i}
-                    className="size-1.5 rounded-full bg-zinc-400 dark:bg-zinc-500 animate-bounce"
-                    style={{ animationDelay: `${i * 150}ms` }}
+                    className="size-1.5 rounded-full"
+                    style={{
+                      background: "var(--accent)",
+                      animation: `sage-pulse 1.4s ease-in-out ${i * 220}ms infinite`,
+                    }}
                   />
                 ))}
               </div>
             </div>
           )}
+
           <div ref={bottomRef} />
         </main>
 
-        <footer className="border-t border-zinc-200 dark:border-zinc-800 px-4 py-4">
-          <div className="flex w-full max-w-2xl mx-auto items-end gap-3">
+        {/* Input */}
+        <footer className="px-6 py-4 shrink-0">
+          <div
+            className="flex w-full max-w-2xl mx-auto items-end gap-0 rounded-lg overflow-hidden"
+            style={{
+              border: "1px solid var(--border)",
+              background: "var(--bg-subtle)",
+            }}
+          >
+            <span
+              className="px-3 py-3 text-sm shrink-0 select-none"
+              style={{ color: "var(--text-dim)" }}
+            >
+              ›
+            </span>
             <textarea
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Message Piper… (Enter to send, Shift+Enter for newline)"
+              placeholder="message piper…"
               rows={1}
               disabled={streaming}
-              className="flex-1 resize-none rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 disabled:opacity-50 max-h-40 overflow-y-auto"
-              style={{ fieldSizing: "content" } as React.CSSProperties}
+              className="flex-1 resize-none bg-transparent py-3 text-sm focus:outline-none disabled:opacity-40 max-h-40 overflow-y-auto placeholder:opacity-30"
+              style={
+                {
+                  fieldSizing: "content",
+                  color: "var(--text)",
+                  caretColor: "var(--accent)",
+                } as React.CSSProperties
+              }
             />
             <button
               onClick={sendMessage}
               disabled={!input.trim() || streaming}
-              className="shrink-0 rounded-xl bg-zinc-900 dark:bg-zinc-100 px-4 py-3 text-sm font-medium text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="shrink-0 px-4 py-3 text-xs font-medium tracking-wider uppercase transition-all disabled:opacity-20"
+              style={{
+                color: "var(--accent)",
+                borderLeft: "1px solid var(--border)",
+              }}
             >
-              Send
+              send
             </button>
           </div>
+          <p
+            className="text-center mt-2 text-[10px] tracking-widest"
+            style={{ color: "var(--text-dim)" }}
+          >
+            ↵ send · shift+↵ newline
+          </p>
         </footer>
+        </div>
       </div>
     </div>
   );

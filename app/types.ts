@@ -10,6 +10,8 @@ export interface Message {
   type: MessageType;
   content: string;
   toolName?: string;
+  /** e.g. backend marks terminal tool output */
+  subtype?: string;
   isError?: boolean;
   retryText?: string;
 }

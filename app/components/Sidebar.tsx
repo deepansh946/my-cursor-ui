@@ -1,48 +1,116 @@
 "use client";
 
-import { FaPlus } from "react-icons/fa";
+import { FaPlus, FaTrash } from "react-icons/fa";
 import { Thread } from "../types";
 import { formatDate } from "../lib/storage";
 
 export function Sidebar({
   threads,
   currentThreadId,
+  streaming,
   onSelect,
   onNew,
+  onDelete,
 }: {
   threads: Thread[];
   currentThreadId: string;
+  streaming: boolean;
   onSelect: (id: string) => void;
   onNew: () => void;
+  onDelete: (id: string) => void;
 }) {
   const sorted = [...threads].sort((a, b) => b.createdAt - a.createdAt);
+
   return (
-    <div className="w-60 shrink-0 flex flex-col border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
-      <div className="px-4 py-4 border-b border-zinc-200 dark:border-zinc-800">
+    <div
+      className="w-56 shrink-0 flex flex-col"
+      style={{ borderRight: "1px solid var(--border)", background: "var(--bg-subtle)" }}
+    >
+      {/* Brand */}
+      <div className="px-4 py-4">
+        <span
+          className="text-[10px] tracking-[0.3em] uppercase"
+          style={{ color: "var(--text-dim)" }}
+        >
+          conversations
+        </span>
+      </div>
+
+      {/* New chat */}
+      <div className="px-3 pt-3 pb-2">
         <button
           onClick={onNew}
-          className="w-full rounded-lg border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-2"
+          className="w-full flex items-center gap-2 px-3 py-2 text-xs tracking-wide rounded-md transition-all"
+          style={{
+            color: "var(--accent)",
+            border: "1px solid var(--border)",
+            background: "var(--accent-glow)",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--accent-dim)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--accent-glow)")}
         >
-          <FaPlus className="text-[10px]" /> New chat
+          <FaPlus className="text-[9px]" />
+          <span>new chat</span>
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto py-2">
-        {sorted.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => onSelect(t.id)}
-            className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
-              t.id === currentThreadId
-                ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
-                : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            }`}
-          >
-            <p className="truncate font-medium">{t.title}</p>
-            <p className="text-[11px] text-zinc-400 dark:text-zinc-600 mt-0.5">
-              {formatDate(t.createdAt)}
-            </p>
-          </button>
-        ))}
+
+      {/* Thread list */}
+      <div className="flex-1 overflow-y-auto py-1">
+        {sorted.map((t) => {
+          const active = t.id === currentThreadId;
+          return (
+            <div
+              key={t.id}
+              className="flex items-stretch gap-0 group"
+              style={{
+                background: active ? "var(--bg-muted)" : "transparent",
+                borderLeft: `2px solid ${active ? "var(--accent)" : "transparent"}`,
+              }}
+              onMouseEnter={(e) => {
+                if (!active) e.currentTarget.style.background = "var(--bg-hover)";
+              }}
+              onMouseLeave={(e) => {
+                if (!active) e.currentTarget.style.background = "transparent";
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => onSelect(t.id)}
+                className="flex-1 min-w-0 text-left px-3 py-2.5 transition-all"
+              >
+                <p
+                  className="truncate text-xs"
+                  style={{
+                    color: active ? "var(--text)" : "var(--text-muted)",
+                    fontWeight: active ? 500 : 400,
+                  }}
+                >
+                  {t.title}
+                </p>
+                <p
+                  className="text-[10px] mt-0.5"
+                  style={{ color: "var(--text-dim)" }}
+                >
+                  {formatDate(t.createdAt)}
+                </p>
+              </button>
+              <button
+                type="button"
+                disabled={streaming}
+                title="Delete conversation"
+                aria-label="Delete conversation"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(t.id);
+                }}
+                className="shrink-0 px-2 py-2 opacity-40 hover:opacity-100 disabled:opacity-20 transition-opacity"
+                style={{ color: "var(--text-dim)" }}
+              >
+                <FaTrash className="text-[10px]" />
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
