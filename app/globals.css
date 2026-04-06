@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-roboto);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-roboto), sans-serif;
+}
+
+.markdown p { margin: 0.25rem 0; }
+.markdown p:first-child { margin-top: 0; }
+.markdown p:last-child { margin-bottom: 0; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4 { font-weight: 600; margin: 0.75rem 0 0.25rem; }
+.markdown h1 { font-size: 1.25rem; }
+.markdown h2 { font-size: 1.1rem; }
+.markdown h3 { font-size: 1rem; }
+.markdown ul, .markdown ol { padding-left: 1.25rem; margin: 0.25rem 0; }
+.markdown ul { list-style-type: disc; }
+.markdown ol { list-style-type: decimal; }
+.markdown li { margin: 0.15rem 0; }
+.markdown a { text-decoration: underline; opacity: 0.85; }
+.markdown strong { font-weight: 600; }
+.markdown em { font-style: italic; }
+.markdown code { font-family: monospace; font-size: 0.85em; background: rgba(0,0,0,0.08); padding: 0.1em 0.3em; border-radius: 3px; }
+.markdown blockquote { border-left: 3px solid currentColor; padding-left: 0.75rem; opacity: 0.7; margin: 0.5rem 0; }
+.markdown hr { border: none; border-top: 1px solid currentColor; opacity: 0.2; margin: 0.75rem 0; }
