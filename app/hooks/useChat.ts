@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Message, Thread } from "../types";
 import { createThread, loadThreads, saveThreads } from "../lib/storage";
 import { callApi, deleteThread, fetchThreadMessages } from "../lib/api";
 
-export function useChat() {
+export function useChat(threadIdFromUrl: string, selectedRepos: string[]) {
+  const router = useRouter();
   const [threads, setThreads] = useState<Thread[]>([]);
-  const [currentThreadId, setCurrentThreadId] = useState<string>("");
   const [ready, setReady] = useState(false);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -15,14 +16,30 @@ export function useChat() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const messages =
-    threads.find((t) => t.id === currentThreadId)?.messages ?? [];
+    threads.find((t) => t.id === threadIdFromUrl)?.messages ?? [];
 
   useEffect(() => {
-    const { threads: saved, currentThreadId: id } = loadThreads();
+    const { threads: saved } = loadThreads();
     setThreads(saved);
-    setCurrentThreadId(id);
     setReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!ready || !threadIdFromUrl) return;
+    localStorage.setItem("piper_current_thread", threadIdFromUrl);
+    setThreads((prev) => {
+      if (prev.some((t) => t.id === threadIdFromUrl)) return prev;
+      return [
+        ...prev,
+        {
+          id: threadIdFromUrl,
+          title: "New chat",
+          createdAt: Date.now(),
+          messages: [],
+        },
+      ];
+    });
+  }, [ready, threadIdFromUrl]);
 
   useEffect(() => {
     if (!ready) return;
@@ -30,16 +47,16 @@ export function useChat() {
   }, [threads, ready]);
 
   useEffect(() => {
-    if (!ready || !currentThreadId) return;
+    if (!ready || !threadIdFromUrl) return;
     let cancelled = false;
     (async () => {
       try {
-        const fromCheckpoint = await fetchThreadMessages(currentThreadId);
+        const fromCheckpoint = await fetchThreadMessages(threadIdFromUrl);
         if (cancelled) return;
         if (fromCheckpoint.length === 0) return;
         setThreads((prev) =>
           prev.map((t) =>
-            t.id === currentThreadId ? { ...t, messages: fromCheckpoint } : t,
+            t.id === threadIdFromUrl ? { ...t, messages: fromCheckpoint } : t,
           ),
         );
       } catch {
@@ -49,7 +66,7 @@ export function useChat() {
     return () => {
       cancelled = true;
     };
-  }, [ready, currentThreadId]);
+  }, [ready, threadIdFromUrl]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -58,7 +75,7 @@ export function useChat() {
   const updateMessages = (updater: (prev: Message[]) => Message[]) => {
     setThreads((prev) =>
       prev.map((t) =>
-        t.id === currentThreadId ? { ...t, messages: updater(t.messages) } : t,
+        t.id === threadIdFromUrl ? { ...t, messages: updater(t.messages) } : t,
       ),
     );
   };
@@ -66,13 +83,11 @@ export function useChat() {
   const handleNewThread = () => {
     const t = createThread();
     setThreads((prev) => [t, ...prev]);
-    setCurrentThreadId(t.id);
-    localStorage.setItem("piper_current_thread", t.id);
+    router.replace(`/chat/${t.id}`);
   };
 
   const handleSelectThread = (id: string) => {
-    setCurrentThreadId(id);
-    localStorage.setItem("piper_current_thread", id);
+    router.replace(`/chat/${id}`);
   };
 
   const handleDeleteThread = (id: string) => {
@@ -83,14 +98,12 @@ export function useChat() {
     if (next.length === 0) {
       const t = createThread();
       setThreads([t]);
-      setCurrentThreadId(t.id);
-      localStorage.setItem("piper_current_thread", t.id);
+      router.replace(`/chat/${t.id}`);
       return;
     }
     setThreads(next);
-    if (id === currentThreadId) {
-      setCurrentThreadId(next[0].id);
-      localStorage.setItem("piper_current_thread", next[0].id);
+    if (id === threadIdFromUrl) {
+      router.replace(`/chat/${next[0].id}`);
     }
   };
 
@@ -107,7 +120,7 @@ export function useChat() {
 
     setThreads((prev) =>
       prev.map((t) => {
-        if (t.id !== currentThreadId) return t;
+        if (t.id !== threadIdFromUrl) return t;
         return {
           ...t,
           title: isFirstMessage ? text.slice(0, 40) : t.title,
@@ -119,7 +132,8 @@ export function useChat() {
 
     await callApi({
       text,
-      threadId: currentThreadId,
+      threadId: threadIdFromUrl,
+      repos: selectedRepos,
       updateMessages,
       setStreaming,
       onDone: () => textareaRef.current?.focus(),
@@ -131,7 +145,8 @@ export function useChat() {
     updateMessages((prev) => prev.filter((m) => m.id !== errorMsgId));
     await callApi({
       text,
-      threadId: currentThreadId,
+      threadId: threadIdFromUrl,
+      repos: selectedRepos,
       updateMessages,
       setStreaming,
       onDone: () => textareaRef.current?.focus(),
@@ -147,7 +162,7 @@ export function useChat() {
 
   return {
     threads,
-    currentThreadId,
+    currentThreadId: threadIdFromUrl,
     messages,
     input,
     setInput,

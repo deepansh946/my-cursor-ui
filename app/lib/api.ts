@@ -35,6 +35,7 @@ export async function fetchThreadMessages(threadId: string): Promise<Message[]> 
 interface CallApiOptions {
   text: string;
   threadId: string;
+  repos?: string[];
   updateMessages: (updater: (prev: Message[]) => Message[]) => void;
   setStreaming: (v: boolean) => void;
   onDone?: () => void;
@@ -43,6 +44,7 @@ interface CallApiOptions {
 export async function callApi({
   text,
   threadId,
+  repos = [],
   updateMessages,
   setStreaming,
   onDone,
@@ -52,7 +54,11 @@ export async function callApi({
       const res = await fetch(`${config.apiBaseUrl}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, thread_id: threadId }),
+      body: JSON.stringify({
+        message: text,
+        thread_id: threadId,
+        ...(repos.length > 0 ? { repos } : {}),
+      }),
     });
 
     if (!res.ok || !res.body) throw new Error("Request failed");

@@ -1,9 +1,15 @@
+import { auth } from "@/auth";
 import { config } from "../../../../lib/config";
 
 export async function GET(
   _req: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  const session = await auth();
+  if (!session) {
+    return Response.json({ messages: [] }, { status: 401 });
+  }
+
   const { id } = await context.params;
   const url = `${config.upstreamBaseUrl}/thread/${encodeURIComponent(id)}/messages`;
   try {

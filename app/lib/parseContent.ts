@@ -7,7 +7,8 @@ export type ContentSegment =
 export function parseContent(text: string): ContentSegment[] {
   const tokens = marked.lexer(text);
   const segments: ContentSegment[] = [];
-  let pendingTokens: marked.Token[] = [];
+  type LexToken = (typeof tokens)[number];
+  let pendingTokens: LexToken[] = [];
 
   const flushPending = () => {
     if (pendingTokens.length === 0) return;
