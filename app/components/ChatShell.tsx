@@ -1,15 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { signOut } from "next-auth/react";
 import { useChat } from "../hooks/useChat";
 import { useSelectedRepos } from "../hooks/useSelectedRepos";
 import { Sidebar } from "./Sidebar";
 import { ChatMessage } from "./ChatMessage";
 import { RepoPicker } from "./RepoPicker";
+import { RepoFileTree } from "./RepoFileTree";
 
 export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string }) {
-  const { selectedRepos, setSelectedRepos } = useSelectedRepos();
+  const { selectedRepo, setSelectedRepo, reposHydrated } = useSelectedRepos();
   const {
     threads,
     currentThreadId,
@@ -22,12 +22,19 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string }) {
     handleNewThread,
     handleSelectThread,
     handleDeleteThread,
+    bindRepoToThread,
     sendMessage,
     retryMessage,
     handleKeyDown,
-  } = useChat(threadIdFromUrl, selectedRepos);
+  } = useChat(threadIdFromUrl, selectedRepo, reposHydrated);
 
+  const currentThread = threads.find((t) => t.id === currentThreadId);
   const [repoOpen, setRepoOpen] = useState(false);
+
+  const handleRepoSave = (repo: string | null) => {
+    setSelectedRepo(repo);
+    bindRepoToThread(threadIdFromUrl, repo);
+  };
 
   useEffect(() => {
     if (!repoOpen) return;
@@ -59,7 +66,7 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string }) {
           <button
             type="button"
             onClick={() => setRepoOpen(true)}
-            className="text-[10px] tracking-[0.15em] uppercase px-2 py-1 rounded transition-opacity hover:opacity-80"
+            className="flex items-center gap-1.5 text-[10px] tracking-[0.15em] uppercase px-2 py-1 rounded transition-opacity hover:opacity-80"
             style={{
               color: "var(--accent)",
               border: "1px solid var(--border)",
@@ -67,7 +74,12 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string }) {
             }}
           >
             repos
-            {selectedRepos.length > 0 ? ` (${selectedRepos.length})` : ""}
+            {selectedRepo && (
+              <span
+                className="size-1.5 rounded-full shrink-0"
+                style={{ background: "var(--accent)" }}
+              />
+            )}
           </button>
           <span
             className="text-[10px] tracking-[0.2em] uppercase hidden sm:inline"
@@ -75,22 +87,14 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string }) {
           >
             coding assistant
           </span>
-          <button
-            type="button"
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="text-[10px] tracking-wider uppercase opacity-50 hover:opacity-100"
-            style={{ color: "var(--text-dim)" }}
-          >
-            sign out
-          </button>
         </div>
       </header>
 
       <RepoPicker
         open={repoOpen}
         onClose={() => setRepoOpen(false)}
-        selected={selectedRepos}
-        onSave={setSelectedRepos}
+        selected={currentThread?.repo ?? selectedRepo}
+        onSave={handleRepoSave}
       />
 
       <div className="flex flex-1 min-h-0">
@@ -103,7 +107,21 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string }) {
           onDelete={handleDeleteThread}
         />
 
-        <div className="flex flex-col flex-1 min-w-0">
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          {currentThread?.repo && (
+            <div
+              className="px-6 py-2 shrink-0 text-[10px] tracking-wide truncate"
+              style={{
+                color: "var(--text-dim)",
+                borderBottom: "1px solid var(--border)",
+                background: "var(--bg-subtle)",
+              }}
+            >
+              <span style={{ color: "var(--accent)", opacity: 0.7 }}>repo</span>
+              {" · "}
+              {currentThread.repo}
+            </div>
+          )}
           <main className="flex-1 overflow-y-auto py-8 space-y-4">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full gap-2">
@@ -206,6 +224,10 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string }) {
             </p>
           </footer>
         </div>
+
+        {currentThread?.repo && (
+          <RepoFileTree activeRepo={currentThread.repo} />
+        )}
       </div>
     </div>
   );

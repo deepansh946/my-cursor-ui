@@ -21,4 +21,5 @@ export interface Thread {
   title: string;
   createdAt: number;
   messages: Message[];
+  repo: string | null;
 }

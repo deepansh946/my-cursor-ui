@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createThread, loadThreads, saveThreads } from "./lib/storage";
+import { loadSelectedRepo } from "./lib/selectedRepos";
 
 export default function Home() {
   const router = useRouter();
@@ -11,7 +12,7 @@ export default function Home() {
     const { threads, currentThreadId } = loadThreads();
     const has = threads.some((t) => t.id === currentThreadId);
     if (!has) {
-      const t = createThread();
+      const t = createThread(loadSelectedRepo());
       saveThreads([t, ...threads]);
       router.replace(`/chat/${t.id}`);
       return;

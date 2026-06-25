@@ -1,12 +1,17 @@
 "use client";
 
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Message, Thread } from "../types";
 import { createThread, loadThreads, saveThreads } from "../lib/storage";
-import { callApi, deleteThread, fetchThreadMessages } from "../lib/api";
+import { callApi, deleteThread, fetchThreadMessages } from "../services/chat";
 
-export function useChat(threadIdFromUrl: string, selectedRepos: string[]) {
+export function useChat(
+  threadIdFromUrl: string,
+  selectedRepo: string | null,
+  reposHydrated: boolean,
+) {
   const router = useRouter();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [ready, setReady] = useState(false);
@@ -15,8 +20,19 @@ export function useChat(threadIdFromUrl: string, selectedRepos: string[]) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const messages =
-    threads.find((t) => t.id === threadIdFromUrl)?.messages ?? [];
+  const currentThread = threads.find((t) => t.id === threadIdFromUrl);
+  const messages = currentThread?.messages ?? [];
+
+  const { data: checkpointMessages } = useQuery({
+    queryKey: ["thread-messages", threadIdFromUrl],
+    queryFn: () => fetchThreadMessages(threadIdFromUrl),
+    enabled: ready && !!threadIdFromUrl,
+    staleTime: 0,
+  });
+
+  const { mutate: removeThread } = useMutation({
+    mutationFn: (id: string) => deleteThread(id),
+  });
 
   useEffect(() => {
     const { threads: saved } = loadThreads();
@@ -25,48 +41,46 @@ export function useChat(threadIdFromUrl: string, selectedRepos: string[]) {
   }, []);
 
   useEffect(() => {
-    if (!ready || !threadIdFromUrl) return;
+    if (!ready || !reposHydrated || !threadIdFromUrl) return;
     localStorage.setItem("piper_current_thread", threadIdFromUrl);
     setThreads((prev) => {
-      if (prev.some((t) => t.id === threadIdFromUrl)) return prev;
+      const existing = prev.find((t) => t.id === threadIdFromUrl);
+      if (existing) {
+        if (!existing.repo && selectedRepo && existing.messages.length === 0) {
+          return prev.map((t) =>
+            t.id === threadIdFromUrl ? { ...t, repo: selectedRepo } : t,
+          );
+        }
+        return prev;
+      }
       return [
         ...prev,
-        {
-          id: threadIdFromUrl,
-          title: "New chat",
-          createdAt: Date.now(),
-          messages: [],
-        },
+        { ...createThread(selectedRepo), id: threadIdFromUrl },
       ];
     });
-  }, [ready, threadIdFromUrl]);
+  }, [ready, reposHydrated, threadIdFromUrl, selectedRepo]);
 
   useEffect(() => {
     if (!ready) return;
     saveThreads(threads);
   }, [threads, ready]);
 
+  const hydratedCheckpointRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!ready || !threadIdFromUrl) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const fromCheckpoint = await fetchThreadMessages(threadIdFromUrl);
-        if (cancelled) return;
-        if (fromCheckpoint.length === 0) return;
-        setThreads((prev) =>
-          prev.map((t) =>
-            t.id === threadIdFromUrl ? { ...t, messages: fromCheckpoint } : t,
-          ),
-        );
-      } catch {
-        /* keep localStorage copy */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [ready, threadIdFromUrl]);
+    hydratedCheckpointRef.current = null;
+  }, [threadIdFromUrl]);
+
+  useEffect(() => {
+    if (!checkpointMessages?.length) return;
+    if (hydratedCheckpointRef.current === threadIdFromUrl) return;
+    hydratedCheckpointRef.current = threadIdFromUrl;
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadIdFromUrl ? { ...t, messages: checkpointMessages } : t,
+      ),
+    );
+  }, [checkpointMessages, threadIdFromUrl]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -80,8 +94,19 @@ export function useChat(threadIdFromUrl: string, selectedRepos: string[]) {
     );
   };
 
+  const bindRepoToThread = (threadId: string, repo: string | null) => {
+    if (!repo) return;
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadId && !t.repo && t.messages.length === 0
+          ? { ...t, repo }
+          : t,
+      ),
+    );
+  };
+
   const handleNewThread = () => {
-    const t = createThread();
+    const t = createThread(selectedRepo);
     setThreads((prev) => [t, ...prev]);
     router.replace(`/chat/${t.id}`);
   };
@@ -92,11 +117,11 @@ export function useChat(threadIdFromUrl: string, selectedRepos: string[]) {
 
   const handleDeleteThread = (id: string) => {
     if (streaming) return;
-    void deleteThread(id).catch(() => {});
+    removeThread(id);
 
     const next = threads.filter((t) => t.id !== id);
     if (next.length === 0) {
-      const t = createThread();
+      const t = createThread(selectedRepo);
       setThreads([t]);
       router.replace(`/chat/${t.id}`);
       return;
@@ -118,22 +143,26 @@ export function useChat(threadIdFromUrl: string, selectedRepos: string[]) {
       content: text,
     };
 
-    setThreads((prev) =>
-      prev.map((t) => {
+    setInput("");
+
+    let repoForApi: string | null = null;
+    setThreads((prev) => {
+      const thread = prev.find((t) => t.id === threadIdFromUrl);
+      repoForApi = thread?.repo ?? selectedRepo;
+      return prev.map((t) => {
         if (t.id !== threadIdFromUrl) return t;
         return {
           ...t,
           title: isFirstMessage ? text.slice(0, 40) : t.title,
           messages: [...t.messages, humanMsg],
         };
-      }),
-    );
-    setInput("");
+      });
+    });
 
     await callApi({
       text,
       threadId: threadIdFromUrl,
-      repos: selectedRepos,
+      repo: repoForApi,
       updateMessages,
       setStreaming,
       onDone: () => textareaRef.current?.focus(),
@@ -143,10 +172,12 @@ export function useChat(threadIdFromUrl: string, selectedRepos: string[]) {
   const retryMessage = async (text: string, errorMsgId: string) => {
     if (streaming) return;
     updateMessages((prev) => prev.filter((m) => m.id !== errorMsgId));
+    const repoForApi =
+      threads.find((t) => t.id === threadIdFromUrl)?.repo ?? selectedRepo;
     await callApi({
       text,
       threadId: threadIdFromUrl,
-      repos: selectedRepos,
+      repo: repoForApi,
       updateMessages,
       setStreaming,
       onDone: () => textareaRef.current?.focus(),
@@ -172,6 +203,7 @@ export function useChat(threadIdFromUrl: string, selectedRepos: string[]) {
     handleNewThread,
     handleSelectThread,
     handleDeleteThread,
+    bindRepoToThread,
     sendMessage,
     retryMessage,
     handleKeyDown,

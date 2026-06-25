@@ -18,8 +18,9 @@ export function ChatMessage({
 }) {
   const isHuman = message.type === "HumanMessage";
   const isTool = message.type === "ToolMessage";
+  const isToolError = isTool && message.isError;
 
-  if (isTool) {
+  if (isTool && !isToolError) {
     return (
       <div className="w-full max-w-2xl mx-auto px-6 pb-4">
         {message.subtype === "terminal" ? (
@@ -45,6 +46,19 @@ export function ChatMessage({
         >
           {isHuman ? "you" : "piper"}
         </span>
+
+        {message.isError && message.toolName && (
+          <span
+            className="text-[10px] tracking-wide font-medium w-fit px-2 py-0.5 rounded"
+            style={{
+              color: "var(--error)",
+              background: "rgba(248,113,113,0.08)",
+              border: "1px solid rgba(248,113,113,0.2)",
+            }}
+          >
+            {message.toolName}
+          </span>
+        )}
 
         <div
           className="px-4 py-3 text-sm leading-relaxed rounded-lg"

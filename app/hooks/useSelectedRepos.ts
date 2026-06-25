@@ -1,25 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { loadSelectedRepos, saveSelectedRepos } from "../lib/selectedRepos";
+import { loadSelectedRepo, saveSelectedRepo } from "../lib/selectedRepos";
 
 export function useSelectedRepos() {
-  const [repos, setReposState] = useState<string[]>([]);
+  const [repo, setRepoState] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    setReposState(loadSelectedRepos());
+    setRepoState(loadSelectedRepo());
     setHydrated(true);
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    saveSelectedRepos(repos);
-  }, [repos, hydrated]);
+    saveSelectedRepo(repo);
+  }, [repo, hydrated]);
 
-  const setSelectedRepos = useCallback((next: string[]) => {
-    setReposState(next);
+  const setSelectedRepo = useCallback((next: string | null) => {
+    setRepoState(next);
   }, []);
 
-  return { selectedRepos: repos, setSelectedRepos };
+  return { selectedRepo: repo, setSelectedRepo, reposHydrated: hydrated };
 }

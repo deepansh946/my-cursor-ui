@@ -1,5 +1,9 @@
 import { Message, MessageType } from "../types";
-import { config } from "./config";
+import { config } from "../lib/config";
+
+function isToolErrorContent(content: string): boolean {
+  return content.startsWith("Error") || content.includes("ToolException");
+}
 
 export async function deleteThread(threadId: string): Promise<boolean> {
   const res = await fetch(
@@ -29,13 +33,17 @@ export async function fetchThreadMessages(threadId: string): Promise<Message[]> 
     content: m.content,
     toolName: m.tool_name,
     subtype: m.subtype,
+    isError:
+      m.type === "ToolMessage" && typeof m.content === "string"
+        ? isToolErrorContent(m.content)
+        : false,
   }));
 }
 
 interface CallApiOptions {
   text: string;
   threadId: string;
-  repos?: string[];
+  repo?: string | null;
   updateMessages: (updater: (prev: Message[]) => Message[]) => void;
   setStreaming: (v: boolean) => void;
   onDone?: () => void;
@@ -44,20 +52,20 @@ interface CallApiOptions {
 export async function callApi({
   text,
   threadId,
-  repos = [],
+  repo = null,
   updateMessages,
   setStreaming,
   onDone,
 }: CallApiOptions) {
   setStreaming(true);
   try {
-      const res = await fetch(`${config.apiBaseUrl}/chat`, {
+    const res = await fetch(`${config.apiBaseUrl}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: text,
         thread_id: threadId,
-        ...(repos.length > 0 ? { repos } : {}),
+        ...(repo ? { repo } : {}),
       }),
     });
 
@@ -119,22 +127,27 @@ export async function callApi({
               type: "AIMessage",
               content: `Error: ${chunk.content}`,
               isError: true,
+              toolName: chunk.tool_name,
               retryText: text,
             },
           ]);
         } else {
           currentAiId = null;
+          const content =
+            typeof chunk.content === "string"
+              ? chunk.content
+              : JSON.stringify(chunk.content, null, 2);
+          const isError =
+            chunk.type === "ToolMessage" && isToolErrorContent(content);
           updateMessages((prev) => [
             ...prev,
             {
               id: crypto.randomUUID(),
               type: chunk.type,
-              content:
-                typeof chunk.content === "string"
-                  ? chunk.content
-                  : JSON.stringify(chunk.content, null, 2),
+              content,
               toolName: chunk.tool_name,
               subtype: chunk.subtype,
+              isError,
             },
           ]);
         }

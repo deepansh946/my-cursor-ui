@@ -1,18 +1,21 @@
 const KEY = "piper_selected_repos";
 
-export function loadSelectedRepos(): string[] {
+export function loadSelectedRepo(): string | null {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
+    if (!raw) return null;
     const p = JSON.parse(raw) as unknown;
-    return Array.isArray(p)
-      ? p.filter((x): x is string => typeof x === "string")
-      : [];
+    if (typeof p === "string" && p) return p;
+    if (Array.isArray(p)) {
+      const first = p.find((x): x is string => typeof x === "string" && !!x);
+      return first ?? null;
+    }
+    return null;
   } catch {
-    return [];
+    return null;
   }
 }
 
-export function saveSelectedRepos(repos: string[]) {
-  localStorage.setItem(KEY, JSON.stringify(repos));
+export function saveSelectedRepo(repo: string | null) {
+  localStorage.setItem(KEY, JSON.stringify(repo));
 }

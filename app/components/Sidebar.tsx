@@ -93,6 +93,14 @@ export function Sidebar({
                 >
                   {formatDate(t.createdAt)}
                 </p>
+                {t.repo && (
+                  <p
+                    className="text-[9px] mt-0.5 truncate"
+                    style={{ color: "var(--accent)", opacity: 0.55 }}
+                  >
+                    {t.repo.split("/")[1]}
+                  </p>
+                )}
               </button>
               <button
                 type="button"

@@ -1,13 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-
-type RepoRow = {
-  full_name: string;
-  name: string;
-  private: boolean;
-  default_branch: string;
-};
+import { FaLock, FaSearch } from "react-icons/fa";
+import { useGithubRepos } from "../hooks/useGithubRepos";
 
 export function RepoPicker({
   open,
@@ -17,45 +12,17 @@ export function RepoPicker({
 }: {
   open: boolean;
   onClose: () => void;
-  selected: string[];
-  onSave: (fullNames: string[]) => void;
+  selected: string | null;
+  onSave: (repo: string | null) => void;
 }) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [list, setList] = useState<RepoRow[]>([]);
   const [query, setQuery] = useState("");
-  const [draft, setDraft] = useState<Set<string>>(new Set());
+  const [draft, setDraft] = useState<string | null>(null);
+  const { data: list = [], isLoading, isError, error } = useGithubRepos(open);
 
   useEffect(() => {
     if (!open) return;
-    setDraft(new Set(selected));
+    setDraft(selected);
     setQuery("");
-    setError(null);
-    setLoading(true);
-    (async () => {
-      try {
-        const res = await fetch("/api/github/repos");
-        if (!res.ok) {
-          let msg = res.statusText;
-          try {
-            const j = (await res.json()) as { error?: string };
-            if (typeof j.error === "string") msg = j.error;
-          } catch {
-            /* ignore */
-          }
-          setError(msg);
-          setList([]);
-          return;
-        }
-        const data = (await res.json()) as { repos?: RepoRow[] };
-        setList(data.repos ?? []);
-      } catch {
-        setError("Failed to load repositories");
-        setList([]);
-      } finally {
-        setLoading(false);
-      }
-    })();
   }, [open, selected]);
 
   const filtered = useMemo(() => {
@@ -65,15 +32,13 @@ export function RepoPicker({
   }, [list, query]);
 
   const toggle = useCallback((full: string) => {
-    setDraft((prev) => {
-      const n = new Set(prev);
-      if (n.has(full)) n.delete(full);
-      else n.add(full);
-      return n;
-    });
+    setDraft((prev) => (prev === full ? null : full));
   }, []);
 
   if (!open) return null;
+
+  const errorMessage =
+    error instanceof Error ? error.message : "Could not load repos";
 
   return (
     <div
@@ -81,7 +46,7 @@ export function RepoPicker({
       style={{ background: "rgba(0,0,0,0.65)" }}
       role="dialog"
       aria-modal="true"
-      aria-label="Select repositories"
+      aria-label="Select repository"
     >
       <div
         className="w-full max-w-lg max-h-[min(80vh,520px)] flex flex-col rounded-lg overflow-hidden"
@@ -94,68 +59,159 @@ export function RepoPicker({
           className="px-4 py-3 flex items-center justify-between shrink-0"
           style={{ borderBottom: "1px solid var(--border)" }}
         >
-          <span
-            className="text-[10px] tracking-[0.2em] uppercase"
-            style={{ color: "var(--text-dim)" }}
-          >
-            repositories
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className="text-[10px] tracking-[0.2em] uppercase"
+              style={{ color: "var(--text-dim)" }}
+            >
+              repositories
+            </span>
+            {draft && (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                style={{
+                  background: "var(--accent-dim)",
+                  color: "var(--accent)",
+                }}
+              >
+                1
+              </span>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-xs px-2 py-1 rounded opacity-70 hover:opacity-100"
+            className="text-xs px-2 py-1 rounded opacity-50 hover:opacity-100 transition-opacity"
             style={{ color: "var(--text-muted)" }}
           >
             esc
           </button>
         </div>
-        <div className="px-4 py-2 shrink-0">
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="filter…"
-            className="w-full px-3 py-2 text-xs rounded-md focus:outline-none"
-            style={{
-              border: "1px solid var(--border)",
-              background: "var(--bg-muted)",
-              color: "var(--text)",
-            }}
-          />
+
+        <div className="px-4 py-2.5 shrink-0">
+          <div className="relative">
+            <FaSearch
+              className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              style={{ color: "var(--text-dim)", fontSize: 10 }}
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="filter…"
+              className="w-full pl-8 pr-3 py-2 text-xs rounded-md focus:outline-none"
+              style={{
+                border: "1px solid var(--border)",
+                background: "var(--bg-muted)",
+                color: "var(--text)",
+              }}
+            />
+          </div>
         </div>
+
         <div className="flex-1 min-h-0 overflow-y-auto px-2 py-1">
-          {loading && (
-            <p className="text-xs px-2 py-4" style={{ color: "var(--text-dim)" }}>
-              loading…
-            </p>
-          )}
-          {error && !loading && (
-            <p className="text-xs px-2 py-4" style={{ color: "var(--error)" }}>
-              {typeof error === "string" ? error : "Could not load repos"}
-            </p>
-          )}
-          {!loading &&
-            !error &&
-            filtered.map((r) => (
-              <label
-                key={r.full_name}
-                className="flex items-center gap-2 px-2 py-2 rounded cursor-pointer hover:opacity-90"
-                style={{ color: "var(--text-muted)" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={draft.has(r.full_name)}
-                  onChange={() => toggle(r.full_name)}
-                  className="rounded border shrink-0"
-                  style={{ borderColor: "var(--border)" }}
+          {isLoading && (
+            <div className="flex items-center gap-1.5 px-2 py-4">
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="size-1.5 rounded-full"
+                  style={{
+                    background: "var(--accent)",
+                    animation: `sage-pulse 1.4s ease-in-out ${i * 220}ms infinite`,
+                  }}
                 />
-                <span className="text-xs truncate flex-1">{r.full_name}</span>
-                {r.private && (
-                  <span className="text-[10px] shrink-0 opacity-50">private</span>
-                )}
-              </label>
-            ))}
+              ))}
+            </div>
+          )}
+          {isError && !isLoading && (
+            <p className="text-xs px-2 py-4" style={{ color: "var(--error)" }}>
+              — {errorMessage}
+            </p>
+          )}
+          {!isLoading && !isError && filtered.length === 0 && (
+            <p className="text-xs px-2 py-4" style={{ color: "var(--text-dim)" }}>
+              — no results
+            </p>
+          )}
+          {!isLoading &&
+            !isError &&
+            filtered.map((r) => {
+              const checked = draft === r.full_name;
+              const [owner, repoName] = r.full_name.split("/");
+              return (
+                <label
+                  key={r.full_name}
+                  className="flex items-center gap-2.5 px-2 py-2 rounded cursor-pointer transition-all"
+                  style={{
+                    borderLeft: `2px solid ${checked ? "var(--accent)" : "transparent"}`,
+                    background: checked ? "var(--accent-dim)" : "transparent",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!checked)
+                      e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!checked)
+                      e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="repo-picker"
+                    checked={checked}
+                    onChange={() => toggle(r.full_name)}
+                    className="sr-only"
+                  />
+                  <div
+                    className="shrink-0 w-3.5 h-3.5 rounded-sm flex items-center justify-center transition-all"
+                    style={{
+                      border: `1px solid ${checked ? "var(--accent)" : "var(--border)"}`,
+                      background: checked ? "var(--accent)" : "transparent",
+                    }}
+                  >
+                    {checked && (
+                      <span
+                        style={{
+                          color: "var(--bg)",
+                          fontSize: 8,
+                          fontWeight: 700,
+                          lineHeight: 1,
+                        }}
+                      >
+                        ✓
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    className="text-[11px] shrink-0"
+                    style={{ color: "var(--text-dim)" }}
+                  >
+                    {owner}
+                  </span>
+                  <span className="text-[11px]" style={{ color: "var(--text-dim)" }}>
+                    /
+                  </span>
+                  <span
+                    className="text-[11px] truncate flex-1"
+                    style={{
+                      color: checked ? "var(--text)" : "var(--text-muted)",
+                      fontWeight: checked ? 500 : 400,
+                    }}
+                  >
+                    {repoName}
+                  </span>
+                  {r.private && (
+                    <FaLock
+                      className="shrink-0"
+                      style={{ color: "var(--text-dim)", fontSize: 9, opacity: 0.6 }}
+                    />
+                  )}
+                </label>
+              );
+            })}
         </div>
+
         <div
           className="px-4 py-3 flex justify-end gap-2 shrink-0"
           style={{ borderTop: "1px solid var(--border)" }}
@@ -163,7 +219,7 @@ export function RepoPicker({
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-2 text-[10px] tracking-wider uppercase"
+            className="px-3 py-2 text-[10px] tracking-wider uppercase transition-opacity hover:opacity-80"
             style={{ color: "var(--text-dim)" }}
           >
             cancel
@@ -171,10 +227,10 @@ export function RepoPicker({
           <button
             type="button"
             onClick={() => {
-              onSave([...draft]);
+              onSave(draft);
               onClose();
             }}
-            className="px-4 py-2 text-[10px] font-medium tracking-wider uppercase rounded"
+            className="px-4 py-2 text-[10px] font-medium tracking-wider uppercase rounded transition-opacity hover:opacity-90"
             style={{
               background: "var(--accent)",
               color: "var(--bg)",

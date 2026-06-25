@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { auth } from "../../../../../auth";
 import { config } from "../../../../lib/config";
 
 export async function GET(
@@ -6,14 +6,17 @@ export async function GET(
   context: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
-  if (!session) {
-    return Response.json({ messages: [] }, { status: 401 });
-  }
-
   const { id } = await context.params;
   const url = `${config.upstreamBaseUrl}/thread/${encodeURIComponent(id)}/messages`;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(5000),
+      headers: {
+        ...(session?.accessToken && {
+          Authorization: `Bearer ${session.accessToken}`,
+        }),
+      },
+    });
     if (!res.ok) {
       return Response.json({ messages: [] });
     }
