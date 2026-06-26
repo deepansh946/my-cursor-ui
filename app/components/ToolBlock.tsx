@@ -10,6 +10,9 @@ const TOOL_LABELS: Record<string, string> = {
   writeFile: "Writing file",
   runCommand: "Running command",
   terminal: "Terminal",
+  commit_changes: "Committing changes",
+  create_pr: "Creating PR",
+  clone_repo: "Cloning repository",
 };
 
 export function ToolBlock({

@@ -45,20 +45,13 @@ export function useChat(
     localStorage.setItem("piper_current_thread", threadIdFromUrl);
     setThreads((prev) => {
       const existing = prev.find((t) => t.id === threadIdFromUrl);
-      if (existing) {
-        if (!existing.repo && selectedRepo && existing.messages.length === 0) {
-          return prev.map((t) =>
-            t.id === threadIdFromUrl ? { ...t, repo: selectedRepo } : t,
-          );
-        }
-        return prev;
-      }
+      if (existing) return prev;
       return [
         ...prev,
-        { ...createThread(selectedRepo), id: threadIdFromUrl },
+        { ...createThread(null), id: threadIdFromUrl },
       ];
     });
-  }, [ready, reposHydrated, threadIdFromUrl, selectedRepo]);
+  }, [ready, reposHydrated, threadIdFromUrl]);
 
   useEffect(() => {
     if (!ready) return;
@@ -105,31 +98,71 @@ export function useChat(
     );
   };
 
-  const handleNewThread = () => {
-    const t = createThread(selectedRepo);
+  const bootstrapRepo = async (threadId: string, repo: string) => {
+    const text =
+      "Clone the repository.";
+    const humanMsg: Message = {
+      id: crypto.randomUUID(),
+      type: "HumanMessage",
+      content: text,
+    };
+
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadId
+          ? {
+              ...t,
+              title: t.title === "New chat" ? "Setting up repo…" : t.title,
+              messages: [...t.messages, humanMsg],
+            }
+          : t,
+      ),
+    );
+
+    const updateMessagesForThread = (updater: (prev: Message[]) => Message[]) => {
+      setThreads((prev) =>
+        prev.map((t) =>
+          t.id === threadId ? { ...t, messages: updater(t.messages) } : t,
+        ),
+      );
+    };
+
+    await callApi({
+      text,
+      threadId,
+      repo,
+      updateMessages: updateMessagesForThread,
+      setStreaming,
+    });
+  };
+
+  const handleNewThread = (): string => {
+    const t = createThread(null);
     setThreads((prev) => [t, ...prev]);
     router.replace(`/chat/${t.id}`);
+    return t.id;
   };
 
   const handleSelectThread = (id: string) => {
     router.replace(`/chat/${id}`);
   };
 
-  const handleDeleteThread = (id: string) => {
-    if (streaming) return;
+  const handleDeleteThread = (id: string): string | null => {
+    if (streaming) return null;
     removeThread(id);
 
     const next = threads.filter((t) => t.id !== id);
     if (next.length === 0) {
-      const t = createThread(selectedRepo);
+      const t = createThread(null);
       setThreads([t]);
       router.replace(`/chat/${t.id}`);
-      return;
+      return t.id;
     }
     setThreads(next);
     if (id === threadIdFromUrl) {
       router.replace(`/chat/${next[0].id}`);
     }
+    return null;
   };
 
   const sendMessage = async () => {
@@ -204,6 +237,7 @@ export function useChat(
     handleSelectThread,
     handleDeleteThread,
     bindRepoToThread,
+    bootstrapRepo,
     sendMessage,
     retryMessage,
     handleKeyDown,

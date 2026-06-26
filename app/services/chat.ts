@@ -1,8 +1,18 @@
 import { Message, MessageType } from "../types";
 import { config } from "../lib/config";
+import { contentToString } from "../lib/content";
 
 function isToolErrorContent(content: string): boolean {
-  return content.startsWith("Error") || content.includes("ToolException");
+  return (
+    content.startsWith("Error") ||
+    content.includes("ToolException") ||
+    content.startsWith("File not found") ||
+    content.startsWith("Missing ") ||
+    content.startsWith("Error committing") ||
+    content.startsWith("Error pushing") ||
+    content.startsWith("Error creating PR") ||
+    content.startsWith("Error cloning")
+  );
 }
 
 export async function deleteThread(threadId: string): Promise<boolean> {
@@ -27,17 +37,18 @@ export async function fetchThreadMessages(threadId: string): Promise<Message[]> 
       subtype?: string;
     }>;
   };
-  return (data.messages ?? []).map((m) => ({
-    id: m.id,
-    type: m.type as MessageType,
-    content: m.content,
-    toolName: m.tool_name,
-    subtype: m.subtype,
-    isError:
-      m.type === "ToolMessage" && typeof m.content === "string"
-        ? isToolErrorContent(m.content)
-        : false,
-  }));
+  return (data.messages ?? []).map((m) => {
+    const content = contentToString(m.content);
+    return {
+      id: m.id,
+      type: m.type as MessageType,
+      content,
+      toolName: m.tool_name,
+      subtype: m.subtype,
+      isError:
+        m.type === "ToolMessage" ? isToolErrorContent(content) : false,
+    };
+  });
 }
 
 interface CallApiOptions {
@@ -91,7 +102,7 @@ export async function callApi({
 
         let chunk: {
           type: MessageType;
-          content: string;
+          content: unknown;
           node: string;
           tool_name?: string;
           subtype?: string;
@@ -103,17 +114,18 @@ export async function callApi({
         }
 
         if (chunk.type === "AIMessage" || chunk.type === "AIMessageChunk") {
+          const piece = contentToString(chunk.content);
           if (currentAiId === null) {
             currentAiId = crypto.randomUUID();
             updateMessages((prev) => [
               ...prev,
-              { id: currentAiId!, type: "AIMessage", content: chunk.content },
+              { id: currentAiId!, type: "AIMessage", content: piece },
             ]);
           } else {
             updateMessages((prev) =>
               prev.map((m) =>
                 m.id === currentAiId
-                  ? { ...m, content: m.content + chunk.content }
+                  ? { ...m, content: m.content + piece }
                   : m,
               ),
             );
@@ -125,7 +137,7 @@ export async function callApi({
             {
               id: crypto.randomUUID(),
               type: "AIMessage",
-              content: `Error: ${chunk.content}`,
+              content: `Error: ${contentToString(chunk.content)}`,
               isError: true,
               toolName: chunk.tool_name,
               retryText: text,
@@ -133,10 +145,7 @@ export async function callApi({
           ]);
         } else {
           currentAiId = null;
-          const content =
-            typeof chunk.content === "string"
-              ? chunk.content
-              : JSON.stringify(chunk.content, null, 2);
+          const content = contentToString(chunk.content);
           const isError =
             chunk.type === "ToolMessage" && isToolErrorContent(content);
           updateMessages((prev) => [

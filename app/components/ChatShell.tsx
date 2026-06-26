@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { signOut } from "next-auth/react";
 import { useChat } from "../hooks/useChat";
 import { useSelectedRepos } from "../hooks/useSelectedRepos";
 import { Sidebar } from "./Sidebar";
 import { ChatMessage } from "./ChatMessage";
 import { RepoPicker } from "./RepoPicker";
 import { RepoFileTree } from "./RepoFileTree";
+
+const PICK_REPO_KEY = "piper_pick_repo";
 
 export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string }) {
   const { selectedRepo, setSelectedRepo, reposHydrated } = useSelectedRepos();
@@ -23,6 +26,7 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string }) {
     handleSelectThread,
     handleDeleteThread,
     bindRepoToThread,
+    bootstrapRepo,
     sendMessage,
     retryMessage,
     handleKeyDown,
@@ -30,20 +34,88 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string }) {
 
   const currentThread = threads.find((t) => t.id === currentThreadId);
   const [repoOpen, setRepoOpen] = useState(false);
+  const [pendingRepoThreadId, setPendingRepoThreadId] = useState<string | null>(
+    null,
+  );
 
-  const handleRepoSave = (repo: string | null) => {
-    setSelectedRepo(repo);
-    bindRepoToThread(threadIdFromUrl, repo);
-  };
+  const handleRepoSave = useCallback(
+    (repo: string | null) => {
+      const targetId = pendingRepoThreadId ?? threadIdFromUrl;
+      const shouldBootstrap =
+        !!repo &&
+        (!!pendingRepoThreadId ||
+          (!currentThread?.repo && currentThread?.messages.length === 0));
+
+      sessionStorage.removeItem(PICK_REPO_KEY);
+      setSelectedRepo(repo);
+      bindRepoToThread(targetId, repo);
+      setPendingRepoThreadId(null);
+      setRepoOpen(false);
+
+      if (shouldBootstrap && repo) {
+        void bootstrapRepo(targetId, repo);
+      }
+    },
+    [
+      pendingRepoThreadId,
+      threadIdFromUrl,
+      currentThread?.repo,
+      currentThread?.messages.length,
+      setSelectedRepo,
+      bindRepoToThread,
+      bootstrapRepo,
+    ],
+  );
+
+  const handleRepoClose = useCallback(() => {
+    sessionStorage.removeItem(PICK_REPO_KEY);
+    setRepoOpen(false);
+    setPendingRepoThreadId(null);
+  }, []);
+
+  const onNewThread = useCallback(() => {
+    const id = handleNewThread();
+    sessionStorage.setItem(PICK_REPO_KEY, id);
+    setPendingRepoThreadId(id);
+    setRepoOpen(true);
+  }, [handleNewThread]);
+
+  const onDeleteThread = useCallback(
+    (id: string) => {
+      const newId = handleDeleteThread(id);
+      if (newId) {
+        sessionStorage.setItem(PICK_REPO_KEY, newId);
+        setPendingRepoThreadId(newId);
+        setRepoOpen(true);
+      }
+    },
+    [handleDeleteThread],
+  );
+
+  useEffect(() => {
+    const pickId = sessionStorage.getItem(PICK_REPO_KEY);
+    if (pickId === threadIdFromUrl) {
+      setPendingRepoThreadId(threadIdFromUrl);
+      setRepoOpen(true);
+    }
+  }, [threadIdFromUrl]);
 
   useEffect(() => {
     if (!repoOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setRepoOpen(false);
+      if (e.key === "Escape") handleRepoClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [repoOpen]);
+  }, [repoOpen, handleRepoClose]);
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem("piper_threads");
+    localStorage.removeItem("piper_current_thread");
+    localStorage.removeItem("piper_selected_repos");
+    sessionStorage.removeItem(PICK_REPO_KEY);
+    void signOut({ callbackUrl: "/login" });
+  }, []);
 
   return (
     <div className="flex flex-col h-screen" style={{ background: "var(--bg)" }}>
@@ -81,6 +153,17 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string }) {
               />
             )}
           </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="text-[10px] tracking-[0.15em] uppercase px-2 py-1 rounded transition-opacity hover:opacity-80"
+            style={{
+              color: "var(--text-dim)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            logout
+          </button>
           <span
             className="text-[10px] tracking-[0.2em] uppercase hidden sm:inline"
             style={{ color: "var(--text-dim)" }}
@@ -92,8 +175,12 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string }) {
 
       <RepoPicker
         open={repoOpen}
-        onClose={() => setRepoOpen(false)}
-        selected={currentThread?.repo ?? selectedRepo}
+        onClose={handleRepoClose}
+        selected={
+          pendingRepoThreadId
+            ? selectedRepo
+            : (currentThread?.repo ?? selectedRepo)
+        }
         onSave={handleRepoSave}
       />
 
@@ -103,8 +190,8 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string }) {
           currentThreadId={currentThreadId}
           streaming={streaming}
           onSelect={handleSelectThread}
-          onNew={handleNewThread}
-          onDelete={handleDeleteThread}
+          onNew={onNewThread}
+          onDelete={onDeleteThread}
         />
 
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">

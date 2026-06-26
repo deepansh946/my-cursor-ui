@@ -1,11 +1,14 @@
 import { marked } from "marked";
+import { contentToString } from "./content";
 
 export type ContentSegment =
   | { kind: "html"; html: string }
   | { kind: "code"; lang: string; code: string };
 
-export function parseContent(text: string): ContentSegment[] {
-  const tokens = marked.lexer(text);
+export function parseContent(text: unknown): ContentSegment[] {
+  const input = contentToString(text);
+  if (!input) return [];
+  const tokens = marked.lexer(input);
   const segments: ContentSegment[] = [];
   type LexToken = (typeof tokens)[number];
   let pendingTokens: LexToken[] = [];

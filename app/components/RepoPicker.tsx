@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaLock, FaSearch } from "react-icons/fa";
 import { useGithubRepos } from "../hooks/useGithubRepos";
 
@@ -19,10 +19,14 @@ export function RepoPicker({
   const [draft, setDraft] = useState<string | null>(null);
   const { data: list = [], isLoading, isError, error } = useGithubRepos(open);
 
+  const wasOpen = useRef(false);
+
   useEffect(() => {
-    if (!open) return;
-    setDraft(selected);
-    setQuery("");
+    if (open && !wasOpen.current) {
+      setDraft(selected);
+      setQuery("");
+    }
+    wasOpen.current = open;
   }, [open, selected]);
 
   const filtered = useMemo(() => {
@@ -47,6 +51,7 @@ export function RepoPicker({
       role="dialog"
       aria-modal="true"
       aria-label="Select repository"
+      onClick={onClose}
     >
       <div
         className="w-full max-w-lg max-h-[min(80vh,520px)] flex flex-col rounded-lg overflow-hidden"
@@ -54,6 +59,7 @@ export function RepoPicker({
           border: "1px solid var(--border)",
           background: "var(--bg-subtle)",
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         <div
           className="px-4 py-3 flex items-center justify-between shrink-0"

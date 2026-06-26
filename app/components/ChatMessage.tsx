@@ -23,7 +23,7 @@ export function ChatMessage({
   if (isTool && !isToolError) {
     return (
       <div className="w-full max-w-2xl mx-auto px-6 pb-4">
-        {message.subtype === "terminal" ? (
+        {message.subtype === "terminal" || message.subtype === "git" ? (
           <TerminalBlock content={message.content} isStreaming={!!isStreaming} />
         ) : (
           <ToolBlock
