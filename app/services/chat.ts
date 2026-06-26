@@ -1,5 +1,6 @@
 import { Message, MessageType } from "../types";
-import { config } from "../lib/config";
+import { apiFetch } from "../lib/apiClient";
+import { getSession } from "next-auth/react";
 import { contentToString } from "../lib/content";
 
 function isToolErrorContent(content: string): boolean {
@@ -16,16 +17,15 @@ function isToolErrorContent(content: string): boolean {
 }
 
 export async function deleteThread(threadId: string): Promise<boolean> {
-  const res = await fetch(
-    `${config.apiBaseUrl}/thread/${encodeURIComponent(threadId)}`,
-    { method: "DELETE" },
-  );
+  const res = await apiFetch(`/thread/${encodeURIComponent(threadId)}`, {
+    method: "DELETE",
+  });
   return res.ok;
 }
 
 export async function fetchThreadMessages(threadId: string): Promise<Message[]> {
-  const res = await fetch(
-    `${config.apiBaseUrl}/thread/${encodeURIComponent(threadId)}/messages`,
+  const res = await apiFetch(
+    `/thread/${encodeURIComponent(threadId)}/messages`,
   );
   if (!res.ok) return [];
   const data = (await res.json()) as {
@@ -72,13 +72,15 @@ export async function callApi({
 }: CallApiOptions) {
   setStreaming(true);
   try {
-    const res = await fetch(`${config.apiBaseUrl}/chat`, {
+    const session = await getSession();
+    const res = await apiFetch("/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: text,
         thread_id: threadId,
         repo: repo ?? null,
+        github_token: session?.accessToken ?? "",
       }),
     });
 

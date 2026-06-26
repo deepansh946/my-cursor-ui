@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/apiClient";
 import { config } from "../lib/config";
 
 export type RepoRow = {
@@ -10,7 +11,7 @@ export type RepoRow = {
 export type FlatNode = { path: string; type: string };
 
 export async function fetchRepos(): Promise<RepoRow[]> {
-  const res = await fetch(`${config.apiBaseUrl}/github/repos`);
+  const res = await apiFetch("/github/repos");
   if (!res.ok) {
     let msg = res.statusText;
     try {
@@ -30,7 +31,7 @@ export async function fetchFileTree(
   repo: string,
 ): Promise<FlatNode[]> {
   const res = await fetch(
-    `${config.apiBaseUrl}/github/tree/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+    `${config.appApiBaseUrl}/github/tree/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
   );
   if (!res.ok) throw new Error("Failed to load tree");
   const data = (await res.json()) as { tree?: FlatNode[] };
