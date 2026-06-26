@@ -1,8 +1,10 @@
 "use client";
 
-import { FaPlus, FaTrash } from "react-icons/fa";
+import { Plus, Trash2 } from "lucide-react";
 import { Thread } from "../types";
 import { formatDate } from "../lib/storage";
+import { Button } from "./ui/Button";
+import { Label } from "./ui/Label";
 
 export function Sidebar({
   threads,
@@ -11,6 +13,7 @@ export function Sidebar({
   onSelect,
   onNew,
   onDelete,
+  className = "",
 }: {
   threads: Thread[];
   currentThreadId: string;
@@ -18,86 +21,48 @@ export function Sidebar({
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
+  className?: string;
 }) {
   const sorted = [...threads].sort((a, b) => b.createdAt - a.createdAt);
 
   return (
     <div
-      className="w-56 shrink-0 flex flex-col"
-      style={{ borderRight: "1px solid var(--border)", background: "var(--bg-subtle)" }}
+      className={`w-56 shrink-0 flex flex-col border-r border-border bg-surface ${className}`}
     >
-      {/* Brand */}
-      <div className="px-4 py-4">
-        <span
-          className="text-[10px] tracking-[0.3em] uppercase"
-          style={{ color: "var(--text-dim)" }}
-        >
-          conversations
-        </span>
+      <div className="px-4 py-3">
+        <Label>Threads</Label>
       </div>
 
-      {/* New chat */}
-      <div className="px-3 pt-3 pb-2">
-        <button
-          onClick={onNew}
-          className="w-full flex items-center gap-2 px-3 py-2 text-xs tracking-wide rounded-md transition-all"
-          style={{
-            color: "var(--accent)",
-            border: "1px solid var(--border)",
-            background: "var(--accent-glow)",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--accent-dim)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--accent-glow)")}
-        >
-          <FaPlus className="text-[9px]" />
-          <span>new chat</span>
-        </button>
+      <div className="px-3 pb-2">
+        <Button variant="outline" size="default" onClick={onNew} className="w-full">
+          <Plus size={14} />
+          New chat
+        </Button>
       </div>
 
-      {/* Thread list */}
       <div className="flex-1 overflow-y-auto py-1">
         {sorted.map((t) => {
           const active = t.id === currentThreadId;
           return (
             <div
               key={t.id}
-              className="flex items-stretch gap-0 group"
-              style={{
-                background: active ? "var(--bg-muted)" : "transparent",
-                borderLeft: `2px solid ${active ? "var(--accent)" : "transparent"}`,
-              }}
-              onMouseEnter={(e) => {
-                if (!active) e.currentTarget.style.background = "var(--bg-hover)";
-              }}
-              onMouseLeave={(e) => {
-                if (!active) e.currentTarget.style.background = "transparent";
-              }}
+              className={`flex items-stretch group thread-row ${active ? "thread-row-active" : ""}`}
             >
               <button
                 type="button"
                 onClick={() => onSelect(t.id)}
-                className="flex-1 min-w-0 text-left px-3 py-2.5 transition-all"
+                className="flex-1 min-w-0 text-left px-3 py-2"
               >
                 <p
-                  className="truncate text-xs"
-                  style={{
-                    color: active ? "var(--text)" : "var(--text-muted)",
-                    fontWeight: active ? 500 : 400,
-                  }}
+                  className={`truncate text-sm ${active ? "text-foreground font-medium" : "text-foreground-secondary"}`}
                 >
                   {t.title}
                 </p>
-                <p
-                  className="text-[10px] mt-0.5"
-                  style={{ color: "var(--text-dim)" }}
-                >
+                <p className="text-xs text-muted-foreground mt-0.5 font-data">
                   {formatDate(t.createdAt)}
                 </p>
                 {t.repo && (
-                  <p
-                    className="text-[9px] mt-0.5 truncate"
-                    style={{ color: "var(--accent)", opacity: 0.55 }}
-                  >
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate font-data">
                     {t.repo.split("/")[1]}
                   </p>
                 )}
@@ -111,10 +76,9 @@ export function Sidebar({
                   e.stopPropagation();
                   onDelete(t.id);
                 }}
-                className="shrink-0 px-2 py-2 opacity-40 hover:opacity-100 disabled:opacity-20 transition-opacity"
-                style={{ color: "var(--text-dim)" }}
+                className="shrink-0 px-2 py-2 opacity-0 group-hover:opacity-60 hover:!opacity-100 disabled:opacity-20 transition-opacity text-muted-foreground"
               >
-                <FaTrash className="text-[10px]" />
+                <Trash2 size={12} />
               </button>
             </div>
           );

@@ -2,14 +2,16 @@
 
 import { useMemo, useState } from "react";
 import {
-  FaChevronDown,
-  FaChevronRight,
-  FaFile,
-  FaFolder,
-  FaFolderOpen,
-} from "react-icons/fa";
+  ChevronDown,
+  ChevronRight,
+  File,
+  Folder,
+  FolderOpen,
+} from "lucide-react";
 import type { FlatNode } from "../services/github";
 import { useGithubTree } from "../hooks/useGithubTree";
+import { Label } from "./ui/Label";
+import { Spinner } from "./ui/Spinner";
 
 type TreeNode = {
   name: string;
@@ -61,36 +63,31 @@ function TreeRow({ node, depth }: { node: TreeNode; depth: number }) {
   return (
     <div>
       <div
-        className="flex items-center gap-1.5 py-[3px] cursor-pointer rounded transition-colors"
+        className="tree-row flex items-center gap-1.5 py-0.5 cursor-pointer rounded-[var(--radius-sm)]"
         style={{ paddingLeft: `${8 + depth * 12}px`, paddingRight: 8 }}
-        onMouseEnter={(e) =>
-          (e.currentTarget.style.background = "var(--bg-hover)")
-        }
-        onMouseLeave={(e) =>
-          (e.currentTarget.style.background = "transparent")
-        }
         onClick={() => isFolder && setOpen((o) => !o)}
       >
         {isFolder ? (
           <>
-            <span style={{ color: "var(--text-dim)", fontSize: 7, flexShrink: 0 }}>
-              {open ? <FaChevronDown /> : <FaChevronRight />}
+            <span className="text-muted-foreground shrink-0">
+              {open ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
             </span>
-            <span style={{ color: "var(--accent)", fontSize: 10, flexShrink: 0, opacity: 0.7 }}>
-              {open ? <FaFolderOpen /> : <FaFolder />}
+            <span className="text-muted-foreground shrink-0">
+              {open ? <FolderOpen size={12} /> : <Folder size={12} />}
             </span>
           </>
         ) : (
           <>
-            <span style={{ fontSize: 7, flexShrink: 0, visibility: "hidden" }}>▶</span>
-            <span style={{ color: "var(--border)", fontSize: 10, flexShrink: 0 }}>
-              <FaFile />
+            <span className="shrink-0 invisible">
+              <ChevronRight size={10} />
+            </span>
+            <span className="text-muted-foreground shrink-0">
+              <File size={12} />
             </span>
           </>
         )}
         <span
-          className="text-[11px] truncate"
-          style={{ color: isFolder ? "var(--text-muted)" : "var(--text-dim)" }}
+          className={`text-xs truncate ${isFolder ? "text-foreground-secondary" : "text-muted-foreground"}`}
         >
           {node.name}
         </span>
@@ -106,56 +103,35 @@ function TreeRow({ node, depth }: { node: TreeNode; depth: number }) {
   );
 }
 
-export function RepoFileTree({ activeRepo }: { activeRepo: string }) {
+export function RepoFileTree({
+  activeRepo,
+  className = "",
+}: {
+  activeRepo: string;
+  className?: string;
+}) {
   const { data, isLoading, isError } = useGithubTree(activeRepo);
   const tree = useMemo(() => buildTree(data ?? []), [data]);
   const [owner, repoName] = activeRepo.split("/");
 
   return (
     <div
-      className="w-56 shrink-0 flex flex-col overflow-hidden"
-      style={{
-        borderLeft: "1px solid var(--border)",
-        background: "var(--bg-subtle)",
-      }}
+      className={`w-56 shrink-0 flex flex-col overflow-hidden border-l border-border bg-surface ${className}`}
     >
-      <div
-        className="px-3 py-2.5 shrink-0"
-        style={{ borderBottom: "1px solid var(--border)" }}
-      >
-        <p
-          className="text-[10px] tracking-[0.15em] uppercase truncate font-medium"
-          style={{ color: "var(--text-muted)" }}
-        >
-          {repoName}
-        </p>
-        <p
-          className="text-[9px] mt-0.5 truncate"
-          style={{ color: "var(--text-dim)", opacity: 0.6 }}
-        >
-          {owner}
-        </p>
+      <div className="px-3 py-3 shrink-0 border-b border-border">
+        <Label>Workspace</Label>
+        <p className="text-xs mt-1 truncate font-data text-foreground-secondary">{repoName}</p>
+        <p className="text-xs mt-0.5 truncate font-data text-muted-foreground">{owner}</p>
       </div>
 
       <div className="flex-1 overflow-y-auto py-1">
         {isLoading && (
-          <div className="flex items-center gap-1.5 px-3 py-4">
-            {[0, 1, 2].map((i) => (
-              <span
-                key={i}
-                className="size-1 rounded-full"
-                style={{
-                  background: "var(--accent)",
-                  animation: `sage-pulse 1.4s ease-in-out ${i * 220}ms infinite`,
-                }}
-              />
-            ))}
+          <div className="flex items-center justify-center px-3 py-4">
+            <Spinner />
           </div>
         )}
         {isError && !isLoading && (
-          <p className="text-[11px] px-3 py-3" style={{ color: "var(--error)" }}>
-            Failed to load tree
-          </p>
+          <p className="text-xs px-3 py-3 text-destructive">Failed to load tree</p>
         )}
         {!isLoading &&
           !isError &&

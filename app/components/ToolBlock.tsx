@@ -1,6 +1,7 @@
 "use client";
 
-import { FaSpinner, FaCheck, FaBolt } from "react-icons/fa";
+import { Check, Zap } from "lucide-react";
+import { Spinner } from "./ui/Spinner";
 
 const TOOL_LABELS: Record<string, string> = {
   indexer: "Indexing files",
@@ -23,29 +24,13 @@ export function ToolBlock({
   isStreaming: boolean;
 }) {
   return (
-    <div
-      className="flex items-center gap-2.5 px-3 py-2 text-xs rounded-md w-fit"
-      style={{
-        background: "var(--bg-muted)",
-        border: "1px solid var(--border)",
-        color: "var(--text-muted)",
-      }}
-    >
-      <FaBolt
-        className="text-[10px] shrink-0"
-        style={{ color: "var(--accent)", opacity: 0.7 }}
-      />
-      <span className="tracking-wide">{TOOL_LABELS[toolName] ?? toolName}</span>
+    <div className="flex items-center gap-2 px-3 py-2 text-xs rounded-[var(--radius)] w-fit bg-surface border border-border text-foreground-secondary">
+      <Zap size={12} className="text-muted-foreground shrink-0" />
+      <span>{TOOL_LABELS[toolName] ?? toolName}</span>
       {isStreaming ? (
-        <FaSpinner
-          className="text-[9px] animate-spin shrink-0"
-          style={{ color: "var(--accent)" }}
-        />
+        <Spinner size={12} />
       ) : (
-        <FaCheck
-          className="text-[9px] shrink-0"
-          style={{ color: "var(--accent)" }}
-        />
+        <Check size={12} className="text-muted-foreground shrink-0" />
       )}
     </div>
   );

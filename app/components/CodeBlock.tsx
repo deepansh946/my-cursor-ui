@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FaCopy, FaCheck } from "react-icons/fa";
+import { Check, Copy } from "lucide-react";
 import { codeToHtml } from "shiki";
 
 export function CodeBlock({ code, lang }: { code: string; lang: string }) {
@@ -24,23 +24,27 @@ export function CodeBlock({ code, lang }: { code: string; lang: string }) {
   };
 
   return (
-    <div className="my-2 rounded-lg overflow-hidden border border-zinc-700 text-xs">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-800 border-b border-zinc-700">
-        <span className="text-zinc-400 font-mono">{lang || "text"}</span>
+    <div className="my-2 rounded-[var(--radius)] border border-border bg-surface overflow-hidden text-xs">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-surface-raised">
+        <span className="font-data text-xs text-muted-foreground">{lang || "text"}</span>
         <button
+          type="button"
           onClick={copy}
-          className="text-zinc-400 hover:text-zinc-100 transition-colors text-[11px]"
+          className="text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Copy code"
         >
-          {copied ? <FaCheck className="text-emerald-400" /> : <FaCopy />}
+          {copied ? <Check size={12} className="text-primary" /> : <Copy size={12} />}
         </button>
       </div>
       {html ? (
         <div
-          className="[&>pre]:p-4 [&>pre]:overflow-x-auto [&>pre]:m-0 [&>pre]:rounded-none"
+          className="bg-surface-raised [&>pre]:p-3 [&>pre]:overflow-x-auto [&>pre]:m-0 [&>pre]:rounded-none"
           dangerouslySetInnerHTML={{ __html: html }}
         />
       ) : (
-        <pre className="p-4 bg-zinc-900 text-zinc-300 overflow-x-auto">{code}</pre>
+        <pre className="font-data p-3 bg-surface-raised text-foreground-secondary overflow-x-auto">
+          {code}
+        </pre>
       )}
     </div>
   );

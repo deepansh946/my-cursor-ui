@@ -4,13 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { loadSelectedRepo, saveSelectedRepo } from "../lib/selectedRepos";
 
 export function useSelectedRepos() {
-  const [repo, setRepoState] = useState<string | null>(null);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    setRepoState(loadSelectedRepo());
-    setHydrated(true);
-  }, []);
+  const [repo, setRepoState] = useState<string | null>(() =>
+    typeof window !== "undefined" ? loadSelectedRepo() : null,
+  );
+  const hydrated = typeof window !== "undefined";
 
   useEffect(() => {
     if (!hydrated) return;

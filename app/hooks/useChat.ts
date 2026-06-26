@@ -1,106 +1,101 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Message, Thread } from "../types";
 import { createThread, loadThreads, saveThreads } from "../lib/storage";
+import { getThreadRepo, removeThreadRepo, saveThreadRepo } from "../lib/threadRepos";
 import { callApi, deleteThread, fetchThreadMessages } from "../services/chat";
 
 export function useChat(
-  threadIdFromUrl: string,
+  threadIdFromUrl: string | null,
   selectedRepo: string | null,
   reposHydrated: boolean,
 ) {
   const router = useRouter();
-  const [threads, setThreads] = useState<Thread[]>([]);
-  const [ready, setReady] = useState(false);
+  const queryClient = useQueryClient();
+  const [threads, setThreads] = useState<Thread[]>(() =>
+    typeof window !== "undefined" ? loadThreads().threads : [],
+  );
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [streamingMessages, setStreamingMessages] = useState<Message[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const currentThread = threads.find((t) => t.id === threadIdFromUrl);
-  const messages = currentThread?.messages ?? [];
+  const threadsForView = useMemo(() => {
+    if (!reposHydrated) return threads;
+    return threads.map((t) => {
+      if (t.repo) return t;
+      const stored = getThreadRepo(t.id);
+      return stored ? { ...t, repo: stored } : t;
+    });
+  }, [threads, reposHydrated]);
+
+  const resolveRepo = (threadId: string): string | null => {
+    const fromThread = threadsForView.find((t) => t.id === threadId)?.repo;
+    return fromThread ?? getThreadRepo(threadId) ?? selectedRepo;
+  };
+
+  const currentThread = threadIdFromUrl
+    ? threadsForView.find((t) => t.id === threadIdFromUrl)
+    : undefined;
 
   const { data: checkpointMessages } = useQuery({
     queryKey: ["thread-messages", threadIdFromUrl],
-    queryFn: () => fetchThreadMessages(threadIdFromUrl),
-    enabled: ready && !!threadIdFromUrl,
+    queryFn: () => fetchThreadMessages(threadIdFromUrl!),
+    enabled: !!threadIdFromUrl,
     staleTime: 0,
   });
+
+  const messages = streaming
+    ? streamingMessages
+    : (checkpointMessages ?? []);
 
   const { mutate: removeThread } = useMutation({
     mutationFn: (id: string) => deleteThread(id),
   });
 
-  useEffect(() => {
-    const { threads: saved } = loadThreads();
-    setThreads(saved);
-    setReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!ready || !reposHydrated || !threadIdFromUrl) return;
-    localStorage.setItem("piper_current_thread", threadIdFromUrl);
-    setThreads((prev) => {
-      const existing = prev.find((t) => t.id === threadIdFromUrl);
-      if (existing) return prev;
-      return [
-        ...prev,
-        { ...createThread(null), id: threadIdFromUrl },
-      ];
+  const refetchMessages = useCallback(async () => {
+    if (!threadIdFromUrl) return;
+    await queryClient.refetchQueries({
+      queryKey: ["thread-messages", threadIdFromUrl],
     });
-  }, [ready, reposHydrated, threadIdFromUrl]);
+  }, [queryClient, threadIdFromUrl]);
 
   useEffect(() => {
-    if (!ready) return;
-    saveThreads(threads);
-  }, [threads, ready]);
-
-  const hydratedCheckpointRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    hydratedCheckpointRef.current = null;
+    setStreamingMessages([]);
   }, [threadIdFromUrl]);
 
   useEffect(() => {
-    if (!checkpointMessages?.length) return;
-    if (hydratedCheckpointRef.current === threadIdFromUrl) return;
-    hydratedCheckpointRef.current = threadIdFromUrl;
-    setThreads((prev) =>
-      prev.map((t) =>
-        t.id === threadIdFromUrl ? { ...t, messages: checkpointMessages } : t,
-      ),
-    );
-  }, [checkpointMessages, threadIdFromUrl]);
+    if (!reposHydrated || !threadIdFromUrl) return;
+    localStorage.setItem("piper_current_thread", threadIdFromUrl);
+  }, [reposHydrated, threadIdFromUrl]);
+
+  useEffect(() => {
+    saveThreads(threads);
+  }, [threads]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const updateMessages = (updater: (prev: Message[]) => Message[]) => {
-    setThreads((prev) =>
-      prev.map((t) =>
-        t.id === threadIdFromUrl ? { ...t, messages: updater(t.messages) } : t,
-      ),
-    );
+  const updateStreamingMessages = (updater: (prev: Message[]) => Message[]) => {
+    setStreamingMessages(updater);
   };
 
   const bindRepoToThread = (threadId: string, repo: string | null) => {
     if (!repo) return;
+    saveThreadRepo(threadId, repo);
     setThreads((prev) =>
-      prev.map((t) =>
-        t.id === threadId && !t.repo && t.messages.length === 0
-          ? { ...t, repo }
-          : t,
-      ),
+      prev.map((t) => (t.id === threadId && !t.repo ? { ...t, repo } : t)),
     );
   };
 
   const bootstrapRepo = async (threadId: string, repo: string) => {
-    const text =
-      "Clone the repository.";
+    saveThreadRepo(threadId, repo);
+    const text = "Clone the repository.";
     const humanMsg: Message = {
       id: crypto.randomUUID(),
       type: "HumanMessage",
@@ -112,33 +107,35 @@ export function useChat(
         t.id === threadId
           ? {
               ...t,
+              repo: t.repo ?? repo,
               title: t.title === "New chat" ? "Setting up repo…" : t.title,
-              messages: [...t.messages, humanMsg],
             }
           : t,
       ),
     );
 
-    const updateMessagesForThread = (updater: (prev: Message[]) => Message[]) => {
-      setThreads((prev) =>
-        prev.map((t) =>
-          t.id === threadId ? { ...t, messages: updater(t.messages) } : t,
-        ),
-      );
-    };
+    setStreamingMessages([...(checkpointMessages ?? []), humanMsg]);
 
     await callApi({
       text,
       threadId,
       repo,
-      updateMessages: updateMessagesForThread,
+      updateMessages: updateStreamingMessages,
       setStreaming,
+      onStreamEnd: refetchMessages,
     });
   };
 
-  const handleNewThread = (): string => {
+  const handleNewThread = (opts?: { pickRepo?: boolean }): string => {
     const t = createThread(null);
-    setThreads((prev) => [t, ...prev]);
+    setThreads((prev) => {
+      const next = [t, ...prev];
+      saveThreads(next);
+      return next;
+    });
+    if (opts?.pickRepo) {
+      sessionStorage.setItem("piper_pick_repo", t.id);
+    }
     router.replace(`/chat/${t.id}`);
     return t.id;
   };
@@ -147,16 +144,18 @@ export function useChat(
     router.replace(`/chat/${id}`);
   };
 
-  const handleDeleteThread = (id: string): string | null => {
+  const handleDeleteThread = (id: string): null => {
     if (streaming) return null;
     removeThread(id);
+    removeThreadRepo(id);
+    queryClient.removeQueries({ queryKey: ["thread-messages", id] });
 
     const next = threads.filter((t) => t.id !== id);
     if (next.length === 0) {
-      const t = createThread(null);
-      setThreads([t]);
-      router.replace(`/chat/${t.id}`);
-      return t.id;
+      localStorage.removeItem("piper_current_thread");
+      setThreads([]);
+      router.replace("/chat");
+      return null;
     }
     setThreads(next);
     if (id === threadIdFromUrl) {
@@ -167,9 +166,10 @@ export function useChat(
 
   const sendMessage = async () => {
     const text = input.trim();
-    if (!text || streaming) return;
+    if (!threadIdFromUrl || !text || streaming) return;
 
-    const isFirstMessage = messages.length === 0;
+    const base = checkpointMessages ?? [];
+    const isFirstMessage = base.length === 0;
     const humanMsg: Message = {
       id: crypto.randomUUID(),
       type: "HumanMessage",
@@ -178,41 +178,45 @@ export function useChat(
 
     setInput("");
 
-    let repoForApi: string | null = null;
-    setThreads((prev) => {
-      const thread = prev.find((t) => t.id === threadIdFromUrl);
-      repoForApi = thread?.repo ?? selectedRepo;
-      return prev.map((t) => {
+    const repoForApi = resolveRepo(threadIdFromUrl);
+    setThreads((prev) =>
+      prev.map((t) => {
         if (t.id !== threadIdFromUrl) return t;
         return {
           ...t,
+          repo: t.repo ?? repoForApi,
           title: isFirstMessage ? text.slice(0, 40) : t.title,
-          messages: [...t.messages, humanMsg],
         };
-      });
-    });
+      }),
+    );
+
+    setStreamingMessages([...base, humanMsg]);
 
     await callApi({
       text,
       threadId: threadIdFromUrl,
       repo: repoForApi,
-      updateMessages,
+      updateMessages: updateStreamingMessages,
       setStreaming,
+      onStreamEnd: refetchMessages,
       onDone: () => textareaRef.current?.focus(),
     });
   };
 
   const retryMessage = async (text: string, errorMsgId: string) => {
-    if (streaming) return;
-    updateMessages((prev) => prev.filter((m) => m.id !== errorMsgId));
-    const repoForApi =
-      threads.find((t) => t.id === threadIdFromUrl)?.repo ?? selectedRepo;
+    if (!threadIdFromUrl || streaming) return;
+    const base = (streaming ? streamingMessages : (checkpointMessages ?? [])).filter(
+      (m) => m.id !== errorMsgId,
+    );
+    setStreamingMessages(base);
+    const repoForApi = resolveRepo(threadIdFromUrl);
     await callApi({
       text,
       threadId: threadIdFromUrl,
       repo: repoForApi,
-      updateMessages,
+      updateMessages: updateStreamingMessages,
       setStreaming,
+      onStreamEnd: refetchMessages,
       onDone: () => textareaRef.current?.focus(),
     });
   };
@@ -225,8 +229,8 @@ export function useChat(
   };
 
   return {
-    threads,
-    currentThreadId: threadIdFromUrl,
+    threads: threadsForView,
+    currentThreadId: threadIdFromUrl ?? "",
     messages,
     input,
     setInput,

@@ -10,8 +10,21 @@ export function createThread(repo: string | null = null): Thread {
   };
 }
 
+function toStoredThread(t: Thread): Thread {
+  return {
+    id: t.id,
+    title: t.title,
+    createdAt: t.createdAt,
+    repo: t.repo ?? null,
+    messages: [],
+  };
+}
+
 export function saveThreads(threads: Thread[]) {
-  localStorage.setItem("piper_threads", JSON.stringify(threads));
+  localStorage.setItem(
+    "piper_threads",
+    JSON.stringify(threads.map(toStoredThread)),
+  );
 }
 
 export function loadThreads(): { threads: Thread[]; currentThreadId: string } {
@@ -20,12 +33,17 @@ export function loadThreads(): { threads: Thread[]; currentThreadId: string } {
     const raw = JSON.parse(
       localStorage.getItem("piper_threads") ?? "[]",
     ) as Thread[];
-    threads = raw.map((t) => ({ ...t, repo: t.repo ?? null }));
+    threads = raw.map((t) => ({
+      id: t.id,
+      title: t.title,
+      createdAt: t.createdAt,
+      repo: t.repo ?? null,
+      messages: [],
+    }));
   } catch {}
-  if (threads.length === 0) threads = [createThread()];
   const savedId = localStorage.getItem("piper_current_thread") ?? "";
   const currentThreadId =
-    savedId && threads.find((t) => t.id === savedId) ? savedId : threads[0].id;
+    savedId && threads.some((t) => t.id === savedId) ? savedId : "";
   return { threads, currentThreadId };
 }
 

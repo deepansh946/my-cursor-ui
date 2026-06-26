@@ -1,6 +1,8 @@
 "use client";
 
-import { FaSpinner, FaTerminal } from "react-icons/fa";
+import { Terminal } from "lucide-react";
+import { Label } from "./ui/Label";
+import { Spinner } from "./ui/Spinner";
 
 export function TerminalBlock({
   content,
@@ -10,35 +12,13 @@ export function TerminalBlock({
   isStreaming: boolean;
 }) {
   return (
-    <div
-      className="rounded-lg overflow-hidden text-xs"
-      style={{
-        border: "1px solid var(--border)",
-        background: "var(--bg-muted)",
-      }}
-    >
-      <div
-        className="flex items-center gap-2 px-3 py-1.5"
-        style={{
-          borderBottom: "1px solid var(--border-dim)",
-          color: "var(--text-dim)",
-        }}
-      >
-        <FaTerminal className="text-[10px] shrink-0" style={{ color: "var(--accent)" }} />
-        <span className="tracking-[0.15em] uppercase text-[10px]">terminal</span>
-        {isStreaming && (
-          <FaSpinner className="text-[9px] animate-spin ml-auto" style={{ color: "var(--accent)" }} />
-        )}
+    <div className="rounded-[var(--radius)] border border-border bg-surface overflow-hidden text-xs">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+        <Terminal size={12} className="text-muted-foreground shrink-0" />
+        <Label>Terminal</Label>
+        {isStreaming && <Spinner size={12} className="ml-auto" />}
       </div>
-      <pre
-        className="px-3 py-2 m-0 overflow-x-auto max-h-80 overflow-y-auto leading-relaxed"
-        style={{
-          fontFamily: "var(--font-mono), monospace",
-          color: "var(--text-muted)",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-        }}
-      >
+      <pre className="font-data px-3 py-2 m-0 overflow-x-auto max-h-80 overflow-y-auto leading-relaxed text-foreground-secondary whitespace-pre-wrap break-words bg-surface-raised">
         {content || (isStreaming ? "…" : "")}
       </pre>
     </div>

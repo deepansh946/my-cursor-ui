@@ -58,6 +58,7 @@ interface CallApiOptions {
   updateMessages: (updater: (prev: Message[]) => Message[]) => void;
   setStreaming: (v: boolean) => void;
   onDone?: () => void;
+  onStreamEnd?: () => void | Promise<void>;
 }
 
 export async function callApi({
@@ -67,6 +68,7 @@ export async function callApi({
   updateMessages,
   setStreaming,
   onDone,
+  onStreamEnd,
 }: CallApiOptions) {
   setStreaming(true);
   try {
@@ -76,7 +78,7 @@ export async function callApi({
       body: JSON.stringify({
         message: text,
         thread_id: threadId,
-        ...(repo ? { repo } : {}),
+        repo: repo ?? null,
       }),
     });
 
@@ -175,6 +177,7 @@ export async function callApi({
     ]);
   } finally {
     setStreaming(false);
+    await onStreamEnd?.();
     onDone?.();
   }
 }

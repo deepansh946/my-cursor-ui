@@ -1,41 +1,27 @@
 "use client";
 
 import { signIn } from "next-auth/react";
+import { Button } from "../components/ui/Button";
+import { Panel } from "../components/ui/Panel";
 
 export default function LoginPage() {
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center px-6"
-      style={{ background: "var(--bg)" }}
-    >
-      <div className="w-full max-w-sm space-y-8 text-center">
-        <div>
-          <p
-            className="text-xs font-semibold tracking-[0.25em] uppercase mb-2"
-            style={{ color: "var(--accent)" }}
-          >
-            Piper
-          </p>
-          <h1 className="text-lg font-medium" style={{ color: "var(--text)" }}>
-            Sign in to continue
-          </h1>
-          <p className="text-xs mt-2" style={{ color: "var(--text-dim)" }}>
-            Coding assistant — GitHub only
-          </p>
+    <div className="min-h-screen flex items-center justify-center px-6 bg-background">
+      <Panel className="w-full max-w-sm p-6 space-y-6">
+        <div className="space-y-1 text-center">
+          <h1 className="text-sm font-semibold tracking-tight text-foreground">Piper</h1>
+          <p className="text-sm text-foreground-secondary">Sign in to continue</p>
+          <p className="text-xs text-muted-foreground">GitHub authentication required</p>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="default"
+          size="lg"
+          className="w-full"
           onClick={() => signIn("github", { callbackUrl: "/" })}
-          className="w-full py-3 px-4 text-xs font-medium tracking-wider uppercase rounded-lg transition-opacity hover:opacity-90"
-          style={{
-            background: "var(--accent)",
-            color: "var(--bg)",
-            border: "1px solid var(--accent)",
-          }}
         >
           Continue with GitHub
-        </button>
-      </div>
+        </Button>
+      </Panel>
     </div>
   );
 }

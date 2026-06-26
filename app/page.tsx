@@ -2,43 +2,28 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createThread, loadThreads, saveThreads } from "./lib/storage";
+import { loadThreads } from "./lib/storage";
+import { Spinner } from "./components/ui/Spinner";
 
 export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    let hadStoredThreads = false;
-    try {
-      const raw = localStorage.getItem("piper_threads");
-      hadStoredThreads = !!(raw && (JSON.parse(raw) as unknown[]).length > 0);
-    } catch {}
-
     const { threads, currentThreadId } = loadThreads();
-    const has = threads.some((t) => t.id === currentThreadId);
-
-    if (!hadStoredThreads) {
-      sessionStorage.setItem("piper_pick_repo", currentThreadId);
-      router.replace(`/chat/${currentThreadId}`);
+    if (threads.length === 0) {
+      router.replace("/chat");
       return;
     }
-
-    if (!has) {
-      const t = createThread(null);
-      sessionStorage.setItem("piper_pick_repo", t.id);
-      saveThreads([t, ...threads]);
-      router.replace(`/chat/${t.id}`);
-      return;
-    }
-    router.replace(`/chat/${currentThreadId}`);
+    const target = threads.some((t) => t.id === currentThreadId)
+      ? currentThreadId
+      : threads[0].id;
+    router.replace(`/chat/${target}`);
   }, [router]);
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center"
-      style={{ background: "var(--bg)", color: "var(--text-dim)" }}
-    >
-      <p className="text-xs tracking-widest uppercase">loading</p>
+    <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-background">
+      <Spinner />
+      <p className="text-sm text-muted-foreground">Loading…</p>
     </div>
   );
 }
