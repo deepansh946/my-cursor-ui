@@ -30,10 +30,10 @@ export function CodeBlock({ code, lang }: { code: string; lang: string }) {
         <button
           type="button"
           onClick={copy}
-          className="text-muted-foreground hover:text-foreground transition-colors"
+          className="text-primary hover:text-[var(--primary-hover)] transition-colors"
           aria-label="Copy code"
         >
-          {copied ? <Check size={12} className="text-primary" /> : <Copy size={12} />}
+          {copied ? <Check size={12} /> : <Copy size={12} />}
         </button>
       </div>
       {html ? (

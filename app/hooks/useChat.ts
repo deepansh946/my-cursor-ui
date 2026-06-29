@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Message, Thread } from "../types";
+import { Message, Thread, TokenUsage } from "../types";
 import { createThread, loadThreads, saveThreads } from "../lib/storage";
 import { getThreadRepo, removeThreadRepo, saveThreadRepo } from "../lib/threadRepos";
 import { callApi, deleteThread, fetchThreadMessages } from "../services/chat";
@@ -21,6 +21,7 @@ export function useChat(
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [streamingMessages, setStreamingMessages] = useState<Message[]>([]);
+  const [usageByThread, setUsageByThread] = useState<Record<string, TokenUsage>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -49,9 +50,12 @@ export function useChat(
     staleTime: 0,
   });
 
-  const messages = streaming
-    ? streamingMessages
-    : (checkpointMessages ?? []);
+  const messages = streaming ? streamingMessages : (checkpointMessages ?? []);
+  const tokenUsage = threadIdFromUrl ? usageByThread[threadIdFromUrl] : undefined;
+
+  const handleUsage = useCallback((threadId: string, usage: TokenUsage) => {
+    setUsageByThread((prev) => ({ ...prev, [threadId]: usage }));
+  }, []);
 
   const { mutate: removeThread } = useMutation({
     mutationFn: (id: string) => deleteThread(id),
@@ -63,6 +67,11 @@ export function useChat(
       queryKey: ["thread-messages", threadIdFromUrl],
     });
   }, [queryClient, threadIdFromUrl]);
+
+  const handleStreamEnd = useCallback(async () => {
+    await refetchMessages();
+    setStreamingMessages([]);
+  }, [refetchMessages]);
 
   useEffect(() => {
     setStreamingMessages([]);
@@ -122,7 +131,8 @@ export function useChat(
       repo,
       updateMessages: updateStreamingMessages,
       setStreaming,
-      onStreamEnd: refetchMessages,
+      onUsage: (usage) => handleUsage(threadId, usage),
+      onStreamEnd: handleStreamEnd,
     });
   };
 
@@ -198,7 +208,8 @@ export function useChat(
       repo: repoForApi,
       updateMessages: updateStreamingMessages,
       setStreaming,
-      onStreamEnd: refetchMessages,
+      onUsage: (usage) => handleUsage(threadIdFromUrl, usage),
+      onStreamEnd: handleStreamEnd,
       onDone: () => textareaRef.current?.focus(),
     });
   };
@@ -216,7 +227,8 @@ export function useChat(
       repo: repoForApi,
       updateMessages: updateStreamingMessages,
       setStreaming,
-      onStreamEnd: refetchMessages,
+      onUsage: (usage) => handleUsage(threadIdFromUrl, usage),
+      onStreamEnd: handleStreamEnd,
       onDone: () => textareaRef.current?.focus(),
     });
   };
@@ -235,6 +247,7 @@ export function useChat(
     input,
     setInput,
     streaming,
+    tokenUsage,
     bottomRef,
     textareaRef,
     handleNewThread,

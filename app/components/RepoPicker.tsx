@@ -54,7 +54,7 @@ function RepoPickerPanel({
 
         <div className="px-4 py-3 shrink-0">
           <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <Input
               className="pl-8"
               type="search"
@@ -118,7 +118,7 @@ function RepoPickerPanel({
                     {repoName}
                   </span>
                   {r.private && (
-                    <Lock size={10} className="shrink-0 text-muted-foreground opacity-60" />
+                    <Lock size={10} className="shrink-0 opacity-80" />
                   )}
                 </label>
               );

@@ -29,6 +29,7 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
     input,
     setInput,
     streaming,
+    tokenUsage,
     bottomRef,
     textareaRef,
     handleNewThread,
@@ -255,6 +256,14 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
               </div>
               <p className="text-center mt-2 text-xs text-muted-foreground">
                 Enter to send · Shift+Enter for newline
+                {tokenUsage && (
+                  <span className="font-data text-foreground-faint">
+                    {" "}
+                    · {tokenUsage.input_tokens.toLocaleString()} in ·{" "}
+                    {tokenUsage.output_tokens.toLocaleString()} out ·{" "}
+                    {tokenUsage.total_tokens.toLocaleString()} total
+                  </span>
+                )}
               </p>
             </footer>
           )}

@@ -76,7 +76,7 @@ export function Sidebar({
                   e.stopPropagation();
                   onDelete(t.id);
                 }}
-                className="shrink-0 px-2 py-2 opacity-0 group-hover:opacity-60 hover:!opacity-100 disabled:opacity-20 transition-opacity text-muted-foreground"
+                className="shrink-0 px-2 py-2 opacity-0 group-hover:opacity-60 hover:!opacity-100 disabled:opacity-20 transition-opacity"
               >
                 <Trash2 size={12} />
               </button>

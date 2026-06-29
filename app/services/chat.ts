@@ -1,4 +1,4 @@
-import { Message, MessageType } from "../types";
+import { Message, MessageType, TokenUsage } from "../types";
 import { apiFetch } from "../lib/apiClient";
 import { getSession } from "next-auth/react";
 import { contentToString } from "../lib/content";
@@ -51,123 +51,149 @@ export async function fetchThreadMessages(threadId: string): Promise<Message[]> 
   });
 }
 
-interface CallApiOptions {
+type StreamChunk = {
+  type: string;
+  content?: unknown;
+  node?: string;
+  tool_name?: string;
+  subtype?: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+};
+
+interface StreamContext {
   text: string;
+  updateMessages: (updater: (prev: Message[]) => Message[]) => void;
+  onUsage?: (usage: TokenUsage) => void;
+}
+
+async function processSseStream(
+  body: ReadableStream<Uint8Array>,
+  ctx: StreamContext,
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let currentAiId: string | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const raw = line.slice(6).trim();
+      if (raw === "[DONE]") return;
+
+      let chunk: StreamChunk;
+      try {
+        chunk = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+
+      if (chunk.type === "usage") {
+        ctx.onUsage?.({
+          input_tokens: chunk.input_tokens ?? 0,
+          output_tokens: chunk.output_tokens ?? 0,
+          total_tokens: chunk.total_tokens ?? 0,
+        });
+      } else if (chunk.type === "AIMessage" || chunk.type === "AIMessageChunk") {
+        const piece = contentToString(chunk.content);
+        if (!piece.trim()) continue;
+
+        if (currentAiId === null) {
+          currentAiId = crypto.randomUUID();
+          ctx.updateMessages((prev) => [
+            ...prev,
+            { id: currentAiId!, type: "AIMessage", content: piece },
+          ]);
+        } else {
+          ctx.updateMessages((prev) =>
+            prev.map((m) =>
+              m.id === currentAiId
+                ? { ...m, content: m.content + piece }
+                : m,
+            ),
+          );
+        }
+      } else if (chunk.type === "error") {
+        currentAiId = null;
+        ctx.updateMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            type: "AIMessage",
+            content: `Error: ${contentToString(chunk.content)}`,
+            isError: true,
+            toolName: chunk.tool_name,
+            retryText: ctx.text,
+          },
+        ]);
+      } else if (
+        chunk.type === "ToolMessage" ||
+        chunk.type === "HumanMessage"
+      ) {
+        currentAiId = null;
+        const content = contentToString(chunk.content);
+        const isError =
+          chunk.type === "ToolMessage" && isToolErrorContent(content);
+        ctx.updateMessages((prev) => [
+          ...prev.filter(
+            (m) => m.type !== "AIMessage" || m.content.trim().length > 0,
+          ),
+          {
+            id: crypto.randomUUID(),
+            type: chunk.type as MessageType,
+            content,
+            toolName: chunk.tool_name,
+            subtype: chunk.subtype,
+            isError,
+          },
+        ]);
+      }
+    }
+  }
+}
+
+interface StreamChatOptions {
   threadId: string;
   repo?: string | null;
   updateMessages: (updater: (prev: Message[]) => Message[]) => void;
   setStreaming: (v: boolean) => void;
+  onUsage?: (usage: TokenUsage) => void;
   onDone?: () => void;
   onStreamEnd?: () => void | Promise<void>;
 }
 
-export async function callApi({
-  text,
-  threadId,
-  repo = null,
-  updateMessages,
-  setStreaming,
-  onDone,
-  onStreamEnd,
-}: CallApiOptions) {
-  setStreaming(true);
+async function streamChat(
+  path: string,
+  body: Record<string, unknown>,
+  text: string,
+  opts: StreamChatOptions,
+): Promise<void> {
+  opts.setStreaming(true);
   try {
-    const session = await getSession();
-    const res = await apiFetch("/chat", {
+    const res = await apiFetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: text,
-        thread_id: threadId,
-        repo: repo ?? null,
-        github_token: session?.accessToken ?? "",
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok || !res.body) throw new Error("Request failed");
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let currentAiId: string | null = null;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const raw = line.slice(6).trim();
-        if (raw === "[DONE]") break;
-
-        let chunk: {
-          type: MessageType;
-          content: unknown;
-          node: string;
-          tool_name?: string;
-          subtype?: string;
-        };
-        try {
-          chunk = JSON.parse(raw);
-        } catch {
-          continue;
-        }
-
-        if (chunk.type === "AIMessage" || chunk.type === "AIMessageChunk") {
-          const piece = contentToString(chunk.content);
-          if (currentAiId === null) {
-            currentAiId = crypto.randomUUID();
-            updateMessages((prev) => [
-              ...prev,
-              { id: currentAiId!, type: "AIMessage", content: piece },
-            ]);
-          } else {
-            updateMessages((prev) =>
-              prev.map((m) =>
-                m.id === currentAiId
-                  ? { ...m, content: m.content + piece }
-                  : m,
-              ),
-            );
-          }
-        } else if (chunk.type === "error") {
-          currentAiId = null;
-          updateMessages((prev) => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              type: "AIMessage",
-              content: `Error: ${contentToString(chunk.content)}`,
-              isError: true,
-              toolName: chunk.tool_name,
-              retryText: text,
-            },
-          ]);
-        } else {
-          currentAiId = null;
-          const content = contentToString(chunk.content);
-          const isError =
-            chunk.type === "ToolMessage" && isToolErrorContent(content);
-          updateMessages((prev) => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              type: chunk.type,
-              content,
-              toolName: chunk.tool_name,
-              subtype: chunk.subtype,
-              isError,
-            },
-          ]);
-        }
-      }
-    }
+    await processSseStream(res.body, {
+      text,
+      updateMessages: opts.updateMessages,
+      onUsage: opts.onUsage,
+    });
   } catch (err) {
-    updateMessages((prev) => [
+    opts.updateMessages((prev) => [
       ...prev,
       {
         id: crypto.randomUUID(),
@@ -178,8 +204,36 @@ export async function callApi({
       },
     ]);
   } finally {
-    setStreaming(false);
-    await onStreamEnd?.();
-    onDone?.();
+    await opts.onStreamEnd?.();
+    opts.setStreaming(false);
+    opts.onDone?.();
   }
+}
+
+interface CallApiOptions extends StreamChatOptions {
+  text: string;
+}
+
+export async function callApi({
+  text,
+  threadId,
+  repo = null,
+  updateMessages,
+  setStreaming,
+  onUsage,
+  onDone,
+  onStreamEnd,
+}: CallApiOptions) {
+  const session = await getSession();
+  await streamChat(
+    "/chat",
+    {
+      message: text,
+      thread_id: threadId,
+      repo: repo ?? null,
+      github_token: session?.accessToken ?? "",
+    },
+    text,
+    { threadId, repo, updateMessages, setStreaming, onUsage, onDone, onStreamEnd },
+  );
 }

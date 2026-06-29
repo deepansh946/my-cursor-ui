@@ -14,7 +14,7 @@ export function TerminalBlock({
   return (
     <div className="rounded-[var(--radius)] border border-border bg-surface overflow-hidden text-xs">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-        <Terminal size={12} className="text-muted-foreground shrink-0" />
+        <Terminal size={12} className="shrink-0" />
         <Label>Terminal</Label>
         {isStreaming && <Spinner size={12} className="ml-auto" />}
       </div>

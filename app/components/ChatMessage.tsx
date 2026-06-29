@@ -36,6 +36,10 @@ export function ChatMessage({
     );
   }
 
+  if (!isHuman && !message.isError && !message.content.trim()) {
+    return null;
+  }
+
   return (
     <div
       className={`flex w-full max-w-2xl mx-auto px-6 pb-4 ${isHuman ? "justify-end" : "justify-start"}`}

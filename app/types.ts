@@ -5,6 +5,12 @@ export type MessageType =
   | "ToolMessage"
   | "error";
 
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+}
+
 export interface Message {
   id: string;
   type: MessageType;

@@ -112,9 +112,9 @@ export default function StyleGuidePage() {
             <SectionHeader title="Typography" />
             <div className="space-y-4">
               <p className="text-2xl font-semibold tracking-tight">Heading</p>
-              <p className="text-sm text-foreground">Body — Inter 14px</p>
+              <p className="text-sm text-foreground">Body — Fira Code 14px</p>
               <p className="text-xs text-muted-foreground">Muted label</p>
-              <p className="font-data text-sm text-foreground-secondary">owner/repo — IBM Plex Mono</p>
+              <p className="font-data text-sm text-foreground-secondary">owner/repo — tabular nums</p>
             </div>
           </section>
 
@@ -156,7 +156,7 @@ export default function StyleGuidePage() {
               <div>
                 <Label className="block mb-1">With icon</Label>
                 <div className="relative">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" />
                   <Input className="pl-8" placeholder="Search…" />
                 </div>
               </div>

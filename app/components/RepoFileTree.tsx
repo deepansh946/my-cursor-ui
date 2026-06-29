@@ -69,10 +69,10 @@ function TreeRow({ node, depth }: { node: TreeNode; depth: number }) {
       >
         {isFolder ? (
           <>
-            <span className="text-muted-foreground shrink-0">
+            <span className="shrink-0">
               {open ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
             </span>
-            <span className="text-muted-foreground shrink-0">
+            <span className="shrink-0">
               {open ? <FolderOpen size={12} /> : <Folder size={12} />}
             </span>
           </>
@@ -81,7 +81,7 @@ function TreeRow({ node, depth }: { node: TreeNode; depth: number }) {
             <span className="shrink-0 invisible">
               <ChevronRight size={10} />
             </span>
-            <span className="text-muted-foreground shrink-0">
+            <span className="shrink-0">
               <File size={12} />
             </span>
           </>
