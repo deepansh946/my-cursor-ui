@@ -1,10 +1,19 @@
-import { Message, MessageType, TokenUsage } from "../types";
+import { Message, MessageType, TokenUsage, LlmModel } from "../types";
 import { apiFetch } from "../lib/apiClient";
 import { getSession } from "next-auth/react";
 import { contentToString } from "../lib/content";
 
+export const BOOTSTRAP_CLONE_MESSAGE = "Clone the repository.";
+
+export function isBootstrapCloneMessage(m: {
+  type: string;
+  content: string;
+}): boolean {
+  return m.type === "HumanMessage" && m.content.trim() === BOOTSTRAP_CLONE_MESSAGE;
+}
+
 function isToolErrorContent(content: string): boolean {
-  return (
+  if (
     content.startsWith("Error") ||
     content.includes("ToolException") ||
     content.startsWith("File not found") ||
@@ -13,7 +22,40 @@ function isToolErrorContent(content: string): boolean {
     content.startsWith("Error pushing") ||
     content.startsWith("Error creating PR") ||
     content.startsWith("Error cloning")
-  );
+  ) {
+    return true;
+  }
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    const items = Array.isArray(parsed) ? parsed : [parsed];
+    return items.some(
+      (item) =>
+        item !== null &&
+        typeof item === "object" &&
+        "error" in (item as Record<string, unknown>),
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function formatToolErrorContent(content: string): string {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    const items = Array.isArray(parsed) ? parsed : [parsed];
+    const errors = items
+      .filter(
+        (item) =>
+          item !== null &&
+          typeof item === "object" &&
+          "error" in (item as Record<string, unknown>),
+      )
+      .map((item) => String((item as { error: unknown }).error));
+    if (errors.length > 0) return errors.join("\n");
+  } catch {
+    /* not json */
+  }
+  return content;
 }
 
 export async function deleteThread(threadId: string): Promise<boolean> {
@@ -34,21 +76,63 @@ export async function fetchThreadMessages(threadId: string): Promise<Message[]> 
       type: string;
       content: string;
       tool_name?: string;
+      tool_target?: string;
+      tool_call_id?: string;
       subtype?: string;
     }>;
   };
-  return (data.messages ?? []).map((m) => {
-    const content = contentToString(m.content);
+  return (data.messages ?? [])
+    .filter((m) => !isBootstrapCloneMessage({ type: m.type, content: contentToString(m.content) }))
+    .map((m) => {
+    const raw = contentToString(m.content);
+    const isError = m.type === "ToolMessage" ? isToolErrorContent(raw) : false;
+    const content =
+      m.type === "ToolMessage" && isError ? formatToolErrorContent(raw) : raw;
     return {
       id: m.id,
       type: m.type as MessageType,
       content,
       toolName: m.tool_name,
+      toolTarget: m.tool_target,
+      toolCallId: m.tool_call_id,
       subtype: m.subtype,
-      isError:
-        m.type === "ToolMessage" ? isToolErrorContent(content) : false,
+      isError,
     };
   });
+}
+
+export async function fetchModels(): Promise<{ models: LlmModel[]; default: string }> {
+  const res = await apiFetch("/models");
+  if (!res.ok) return { models: [], default: "gemini-2.5-flash" };
+  return (await res.json()) as { models: LlmModel[]; default: string };
+}
+
+export async function cloneRepo(
+  threadId: string,
+  repo: string,
+): Promise<void> {
+  const session = await getSession();
+  const res = await apiFetch(
+    `/thread/${encodeURIComponent(threadId)}/clone`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo,
+        github_token: session?.accessToken ?? "",
+      }),
+    },
+  );
+  if (!res.ok) {
+    let detail = "Clone failed";
+    try {
+      const data = (await res.json()) as { detail?: string };
+      if (data.detail) detail = data.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
 }
 
 type StreamChunk = {
@@ -56,6 +140,8 @@ type StreamChunk = {
   content?: unknown;
   node?: string;
   tool_name?: string;
+  tool_target?: string;
+  tool_call_id?: string;
   subtype?: string;
   input_tokens?: number;
   output_tokens?: number;
@@ -122,6 +208,22 @@ async function processSseStream(
             ),
           );
         }
+      } else if (chunk.type === "tool_call") {
+        currentAiId = null;
+        const callId = chunk.tool_call_id ?? crypto.randomUUID();
+        ctx.updateMessages((prev) => [
+          ...prev.filter(
+            (m) => m.type !== "AIMessage" || m.content.trim().length > 0,
+          ),
+          {
+            id: callId,
+            type: "ToolMessage",
+            content: "",
+            toolName: chunk.tool_name,
+            toolTarget: chunk.tool_target,
+            toolCallId: chunk.tool_call_id,
+          },
+        ]);
       } else if (chunk.type === "error") {
         currentAiId = null;
         ctx.updateMessages((prev) => [
@@ -140,22 +242,49 @@ async function processSseStream(
         chunk.type === "HumanMessage"
       ) {
         currentAiId = null;
-        const content = contentToString(chunk.content);
+        const raw = contentToString(chunk.content);
         const isError =
-          chunk.type === "ToolMessage" && isToolErrorContent(content);
-        ctx.updateMessages((prev) => [
-          ...prev.filter(
+          chunk.type === "ToolMessage" && isToolErrorContent(raw);
+        const content =
+          chunk.type === "ToolMessage" && isError
+            ? formatToolErrorContent(raw)
+            : raw;
+        const callId = chunk.tool_call_id;
+        ctx.updateMessages((prev) => {
+          const base = prev.filter(
             (m) => m.type !== "AIMessage" || m.content.trim().length > 0,
-          ),
-          {
-            id: crypto.randomUUID(),
-            type: chunk.type as MessageType,
-            content,
-            toolName: chunk.tool_name,
-            subtype: chunk.subtype,
-            isError,
-          },
-        ]);
+          );
+          if (chunk.type === "ToolMessage" && callId) {
+            const idx = base.findIndex((m) => m.toolCallId === callId);
+            if (idx !== -1) {
+              return base.map((m, i) =>
+                i === idx
+                  ? {
+                      ...m,
+                      content,
+                      isError,
+                      toolName: chunk.tool_name ?? m.toolName,
+                      toolTarget: chunk.tool_target ?? m.toolTarget,
+                      subtype: chunk.subtype ?? m.subtype,
+                    }
+                  : m,
+              );
+            }
+          }
+          return [
+            ...base,
+            {
+              id: crypto.randomUUID(),
+              type: chunk.type as MessageType,
+              content,
+              toolName: chunk.tool_name,
+              toolTarget: chunk.tool_target,
+              toolCallId: chunk.tool_call_id,
+              subtype: chunk.subtype,
+              isError,
+            },
+          ];
+        });
       }
     }
   }
@@ -171,18 +300,28 @@ interface StreamChatOptions {
   onStreamEnd?: () => void | Promise<void>;
 }
 
+let activeAbort: AbortController | null = null;
+
+export function abortStream() {
+  activeAbort?.abort();
+}
+
 async function streamChat(
   path: string,
   body: Record<string, unknown>,
   text: string,
   opts: StreamChatOptions,
 ): Promise<void> {
+  activeAbort?.abort();
+  const controller = new AbortController();
+  activeAbort = controller;
   opts.setStreaming(true);
   try {
     const res = await apiFetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
 
     if (!res.ok || !res.body) throw new Error("Request failed");
@@ -193,6 +332,7 @@ async function streamChat(
       onUsage: opts.onUsage,
     });
   } catch (err) {
+    if (controller.signal.aborted) return;
     opts.updateMessages((prev) => [
       ...prev,
       {
@@ -204,6 +344,7 @@ async function streamChat(
       },
     ]);
   } finally {
+    if (activeAbort === controller) activeAbort = null;
     await opts.onStreamEnd?.();
     opts.setStreaming(false);
     opts.onDone?.();
@@ -212,12 +353,14 @@ async function streamChat(
 
 interface CallApiOptions extends StreamChatOptions {
   text: string;
+  modelId: string;
 }
 
 export async function callApi({
   text,
   threadId,
   repo = null,
+  modelId,
   updateMessages,
   setStreaming,
   onUsage,
@@ -231,6 +374,7 @@ export async function callApi({
       message: text,
       thread_id: threadId,
       repo: repo ?? null,
+      model_id: modelId,
       github_token: session?.accessToken ?? "",
     },
     text,

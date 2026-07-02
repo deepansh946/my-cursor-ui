@@ -16,6 +16,8 @@ export interface Message {
   type: MessageType;
   content: string;
   toolName?: string;
+  toolTarget?: string;
+  toolCallId?: string;
   /** e.g. backend marks terminal tool output */
   subtype?: string;
   isError?: boolean;
@@ -28,4 +30,11 @@ export interface Thread {
   createdAt: number;
   messages: Message[];
   repo: string | null;
+  model?: string;
+}
+
+export interface LlmModel {
+  id: string;
+  name: string;
+  description: string;
 }

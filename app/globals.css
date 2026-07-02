@@ -31,6 +31,7 @@
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
   --font-mono: var(--font-mono);
+  --font-sans: var(--font-sans);
 }
 
 * {
@@ -40,15 +41,13 @@
 body {
   background: var(--bg);
   color: var(--foreground);
-  font-family: var(--font-mono), "Fira Code", ui-monospace, monospace;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
   font-size: 14px;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "calt" 1, "liga" 1;
   -webkit-font-smoothing: antialiased;
 }
 
 .font-data {
-  font-family: inherit;
+  font-family: var(--font-mono), "Fira Code", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
 
@@ -174,7 +173,7 @@ body {
 }
 
 .lucide {
-  color: var(--primary);
+  color: currentColor;
 }
 
 button.bg-primary .lucide {

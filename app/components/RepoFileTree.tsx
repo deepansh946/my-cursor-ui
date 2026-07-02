@@ -1,15 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
   File,
   Folder,
   FolderOpen,
+  PanelRightClose,
 } from "lucide-react";
 import type { FlatNode } from "../services/github";
 import { useGithubTree } from "../hooks/useGithubTree";
+import { useRepoStatus } from "../hooks/useRepoStatus";
+import { Button } from "./ui/Button";
 import { Label } from "./ui/Label";
 import { Spinner } from "./ui/Spinner";
 
@@ -63,7 +66,7 @@ function TreeRow({ node, depth }: { node: TreeNode; depth: number }) {
   return (
     <div>
       <div
-        className="tree-row flex items-center gap-1.5 py-0.5 cursor-pointer rounded-[var(--radius-sm)]"
+        className="tree-row flex items-center gap-1.5 py-0.5 cursor-pointer rounded-[var(--radius-sm)] text-muted-foreground"
         style={{ paddingLeft: `${8 + depth * 12}px`, paddingRight: 8 }}
         onClick={() => isFolder && setOpen((o) => !o)}
       >
@@ -87,7 +90,7 @@ function TreeRow({ node, depth }: { node: TreeNode; depth: number }) {
           </>
         )}
         <span
-          className={`text-xs truncate ${isFolder ? "text-foreground-secondary" : "text-muted-foreground"}`}
+          className={`text-xs truncate font-data ${isFolder ? "text-foreground-secondary" : "text-muted-foreground"}`}
         >
           {node.name}
         </span>
@@ -105,23 +108,94 @@ function TreeRow({ node, depth }: { node: TreeNode; depth: number }) {
 
 export function RepoFileTree({
   activeRepo,
+  threadId,
+  streaming = false,
   className = "",
+  onCollapse,
 }: {
   activeRepo: string;
+  threadId: string | null;
+  streaming?: boolean;
   className?: string;
+  onCollapse?: () => void;
 }) {
   const { data, isLoading, isError } = useGithubTree(activeRepo);
+  const {
+    data: repoStatus,
+    isLoading: statusLoading,
+    refetch: refetchStatus,
+  } = useRepoStatus(threadId, activeRepo, streaming);
+  const prevStreaming = useRef(streaming);
+  useEffect(() => {
+    if (prevStreaming.current && !streaming && threadId && activeRepo) {
+      refetchStatus();
+    }
+    prevStreaming.current = streaming;
+  }, [streaming, threadId, activeRepo, refetchStatus]);
   const tree = useMemo(() => buildTree(data ?? []), [data]);
   const [owner, repoName] = activeRepo.split("/");
+  const displayChanges = (repoStatus?.changes ?? []).slice(0, 4);
 
   return (
     <div
       className={`w-56 shrink-0 flex flex-col overflow-hidden border-l border-border bg-surface ${className}`}
     >
-      <div className="px-3 py-3 shrink-0 border-b border-border">
-        <Label>Workspace</Label>
-        <p className="text-xs mt-1 truncate font-data text-foreground-secondary">{repoName}</p>
-        <p className="text-xs mt-0.5 truncate font-data text-muted-foreground">{owner}</p>
+      <div className="px-3 py-3 shrink-0 border-b border-border flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <Label>Workspace</Label>
+          <p className="text-xs mt-1 truncate font-data text-foreground-secondary">{repoName}</p>
+          <p className="text-xs mt-0.5 truncate font-data text-muted-foreground">{owner}</p>
+        </div>
+        {onCollapse && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            onClick={onCollapse}
+            aria-label="Collapse workspace"
+          >
+            <PanelRightClose size={14} className="text-muted-foreground" />
+          </Button>
+        )}
+      </div>
+
+      <div className="px-3 py-2 shrink-0 border-b border-border">
+        {statusLoading && !repoStatus ? (
+          <div className="flex justify-center py-1">
+            <Spinner />
+          </div>
+        ) : !repoStatus?.cloned ? (
+          <p className="text-[11px] text-muted-foreground">Not cloned locally</p>
+        ) : (
+          <div className="space-y-1">
+            <p className="text-[11px] font-data text-foreground-secondary truncate">
+              {repoStatus.branch}
+              {repoStatus.commit && (
+                <>
+                  {" · "}
+                  <span className="text-muted-foreground">{repoStatus.commit}</span>
+                </>
+              )}
+            </p>
+            {repoStatus.dirty ? (
+              <>
+                <p className="text-[11px] text-orange-500">
+                  ● {repoStatus.changed_count ?? 0} modified
+                </p>
+                {displayChanges.map((line) => (
+                  <p
+                    key={line}
+                    className="text-[10px] font-data text-muted-foreground truncate pl-2"
+                  >
+                    {line}
+                  </p>
+                ))}
+              </>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">Clean</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto py-1">

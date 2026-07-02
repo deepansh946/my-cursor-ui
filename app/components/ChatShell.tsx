@@ -2,18 +2,55 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
-import { Menu, X, Send } from "lucide-react";
+import { Menu, PanelRightOpen, Send, Square, X } from "lucide-react";
 import { useChat } from "../hooks/useChat";
 import { useSelectedRepos } from "../hooks/useSelectedRepos";
+import { useSelectedModel } from "../hooks/useSelectedModel";
+import { useModels } from "../hooks/useModels";
 import { Sidebar } from "./Sidebar";
 import { ChatMessage } from "./ChatMessage";
+import { Message } from "../types";
 import { RepoPicker } from "./RepoPicker";
+import { ModelPicker } from "./ModelPicker";
 import { RepoFileTree } from "./RepoFileTree";
+import { SessionContextBar } from "./SessionContextBar";
+import { ChatEmptyState } from "./ChatEmptyState";
 import { clearThreadRepos } from "../lib/threadRepos";
+import { clearThreadModels } from "../lib/threadModels";
+import { clearSelectedModel } from "../lib/selectedModels";
+import { isThreadCloned, clearThreadCloned } from "../lib/threadClone";
+import { isBootstrapCloneMessage } from "../services/chat";
+import { threadDisplayTitle } from "../lib/threadDisplay";
+import { loadWorkspaceOpen, saveWorkspaceOpen } from "../lib/workspacePanel";
 import { Button } from "./ui/Button";
-import { Spinner } from "./ui/Spinner";
 
 const PICK_REPO_KEY = "piper_pick_repo";
+
+function lastHumanText(messages: Message[], beforeIndex: number): string | undefined {
+  for (let j = beforeIndex - 1; j >= 0; j--) {
+    if (messages[j].type === "HumanMessage") return messages[j].content;
+  }
+  return undefined;
+}
+
+function showLabelFor(messages: Message[], i: number): boolean {
+  const msg = messages[i];
+  if (msg.type === "ToolMessage") return false;
+  if (i === 0) return true;
+  const prev = messages[i - 1];
+  if (msg.type === "HumanMessage") return prev.type !== "HumanMessage";
+  return prev.type !== "AIMessage" && prev.type !== "AIMessageChunk";
+}
+
+function needsThinkingBubble(messages: Message[], streaming: boolean): boolean {
+  if (!streaming) return false;
+  const last = messages[messages.length - 1];
+  if (!last) return true;
+  if (last.type === "HumanMessage") return true;
+  if (last.type === "ToolMessage" && !last.content && !last.isError) return false;
+  if (last.type === "AIMessage" && last.content.trim()) return false;
+  return true;
+}
 
 function readPendingPickRepo(threadId: string | null): string | null {
   if (!threadId || typeof window === "undefined") return null;
@@ -22,10 +59,15 @@ function readPendingPickRepo(threadId: string | null): string | null {
 
 export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null }) {
   const { selectedRepo, setSelectedRepo, reposHydrated } = useSelectedRepos();
+  const { selectedModel, setSelectedModel, modelsHydrated } = useSelectedModel();
+  const { data: modelsData } = useModels();
+  const defaultModelId = modelsData?.default ?? "gemini-2.5-flash";
   const {
     threads,
     currentThreadId,
     messages,
+    messagesLoading,
+    checkpointMessages,
     input,
     setInput,
     streaming,
@@ -36,11 +78,21 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
     handleSelectThread,
     handleDeleteThread,
     bindRepoToThread,
+    bindModelToThread,
     bootstrapRepo,
+    resolveModel,
     sendMessage,
     retryMessage,
+    stopStreaming,
     handleKeyDown,
-  } = useChat(threadIdFromUrl, selectedRepo, reposHydrated);
+  } = useChat(
+    threadIdFromUrl,
+    selectedRepo,
+    reposHydrated,
+    selectedModel,
+    modelsHydrated,
+    defaultModelId,
+  );
 
   const hasThread = !!threadIdFromUrl;
   const currentThread = hasThread
@@ -53,16 +105,69 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
     () => readPendingPickRepo(threadIdFromUrl),
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(true);
+  const [workspaceHydrated, setWorkspaceHydrated] = useState(false);
+
+  useEffect(() => {
+    setWorkspaceOpen(loadWorkspaceOpen());
+    setWorkspaceHydrated(true);
+  }, []);
+
+  const toggleWorkspace = useCallback(() => {
+    setWorkspaceOpen((prev) => {
+      const next = !prev;
+      saveWorkspaceOpen(next);
+      return next;
+    });
+  }, []);
+
+  const hasUserMessages =
+    (checkpointMessages ?? []).some(
+      (m) => m.type === "HumanMessage" && !isBootstrapCloneMessage(m),
+    );
+  const activeModelId = threadIdFromUrl
+    ? resolveModel(threadIdFromUrl)
+    : (selectedModel ?? defaultModelId);
+  const activeModelName =
+    modelsData?.models.find((m) => m.id === activeModelId)?.name ?? activeModelId;
+  const activeRepo =
+    pendingRepoThreadId
+      ? selectedRepo
+      : (currentThread?.repo ?? selectedRepo);
+  const repoLabel = activeRepo ?? "Select repo";
+
+  const handleModelSave = useCallback(
+    (modelId: string) => {
+      setSelectedModel(modelId);
+      if (threadIdFromUrl && !hasUserMessages) {
+        bindModelToThread(threadIdFromUrl, modelId);
+      }
+      setModelOpen(false);
+    },
+    [threadIdFromUrl, hasUserMessages, setSelectedModel, bindModelToThread],
+  );
+
+  const handleModelClose = useCallback(() => {
+    setModelOpen(false);
+  }, []);
+
+  const handleModelClick = useCallback(() => {
+    setModelOpen(true);
+  }, []);
 
   const handleRepoSave = useCallback(
-    (repo: string | null) => {
-      const targetId = pendingRepoThreadId ?? threadIdFromUrl;
+    async (repo: string | null) => {
+      const targetId = threadIdFromUrl ?? pendingRepoThreadId;
       if (!targetId) return;
 
+      const hasMessages = (checkpointMessages?.length ?? 0) > 0;
+      const alreadyCloned = !!repo && isThreadCloned(targetId, repo);
       const shouldBootstrap =
         !!repo &&
+        !alreadyCloned &&
         (!!pendingRepoThreadId ||
-          (!currentThread?.repo && currentThread?.messages.length === 0));
+          (!currentThread?.repo && !hasMessages));
 
       sessionStorage.removeItem(PICK_REPO_KEY);
       setSelectedRepo(repo);
@@ -71,13 +176,14 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
       setRepoOpen(false);
 
       if (shouldBootstrap && repo) {
-        void bootstrapRepo(targetId, repo);
+        await bootstrapRepo(targetId, repo);
       }
     },
     [
       pendingRepoThreadId,
       threadIdFromUrl,
       currentThread,
+      checkpointMessages,
       setSelectedRepo,
       bindRepoToThread,
       bootstrapRepo,
@@ -119,14 +225,28 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
     return () => window.removeEventListener("keydown", onKey);
   }, [repoOpen, handleRepoClose]);
 
+  useEffect(() => {
+    if (!modelOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleModelClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [modelOpen, handleModelClose]);
+
   const handleLogout = useCallback(() => {
     localStorage.removeItem("piper_threads");
     localStorage.removeItem("piper_current_thread");
     localStorage.removeItem("piper_selected_repos");
+    clearSelectedModel();
     clearThreadRepos();
+    clearThreadModels();
+    clearThreadCloned();
     sessionStorage.removeItem(PICK_REPO_KEY);
     void signOut({ callbackUrl: "/login" });
   }, []);
+
+  const emptyTitle = currentThread ? threadDisplayTitle(currentThread) : "New chat";
 
   return (
     <div className="flex flex-col h-screen bg-background">
@@ -143,27 +263,28 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
           </Button>
           <span className="text-sm font-semibold tracking-tight text-foreground">Piper</span>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setRepoOpen(true)}>
-            Repos
-            {selectedRepo && (
-              <span className="size-1.5 rounded-full bg-primary shrink-0" />
-            )}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
-            Sign out
-          </Button>
-        </div>
+        <SessionContextBar
+          modelName={activeModelName}
+          modelLocked={hasUserMessages}
+          repoLabel={repoLabel}
+          onModelClick={handleModelClick}
+          onRepoClick={() => setRepoOpen(true)}
+          onSignOut={handleLogout}
+        />
       </header>
+
+      <ModelPicker
+        open={modelOpen}
+        onClose={handleModelClose}
+        selected={activeModelId}
+        locked={hasUserMessages}
+        onSave={handleModelSave}
+      />
 
       <RepoPicker
         open={repoOpen}
         onClose={handleRepoClose}
-        selected={
-          pendingRepoThreadId
-            ? selectedRepo
-            : (currentThread?.repo ?? selectedRepo)
-        }
+        selected={activeRepo}
         onSave={handleRepoSave}
       />
 
@@ -179,6 +300,8 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
           threads={threads}
           currentThreadId={currentThreadId}
           streaming={streaming}
+          defaultModelId={defaultModelId}
+          models={modelsData?.models ?? []}
           onSelect={onSelectThread}
           onNew={onNewThread}
           onDelete={onDeleteThread}
@@ -188,24 +311,21 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
         />
 
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          {currentThread?.repo && (
-            <div className="px-4 sm:px-6 py-2 shrink-0 border-b border-border bg-surface truncate">
-              <span className="font-data text-xs text-muted-foreground">{currentThread.repo}</span>
-            </div>
-          )}
           <main className="flex-1 overflow-y-auto py-6 space-y-4">
             {!hasThread && (
-              <div className="flex items-center justify-center h-full px-6">
+              <div className="flex items-center justify-center h-full px-8 sm:px-10">
                 <p className="text-sm text-muted-foreground">Start a new chat to begin</p>
               </div>
             )}
 
-            {hasThread && messages.length === 0 && (
-              <div className="flex items-center justify-center h-full px-6">
-                <p className="text-sm text-muted-foreground">
-                  Ask Piper anything about your codebase
-                </p>
-              </div>
+            {hasThread && !messagesLoading && messages.length === 0 && (
+              <ChatEmptyState
+                title={emptyTitle}
+                modelName={activeModelName}
+                repo={currentThread?.repo ?? activeRepo}
+                onPickPrompt={setInput}
+                onSelectRepo={() => setRepoOpen(true)}
+              />
             )}
 
             {messages.map((msg, i) => (
@@ -213,14 +333,36 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
                 <ChatMessage
                   message={msg}
                   onRetry={retryMessage}
-                  isStreaming={streaming && i === messages.length - 1}
+                  retryText={lastHumanText(messages, i)}
+                  showLabel={showLabelFor(messages, i)}
+                  isContinuation={
+                    i > 0 && !showLabelFor(messages, i) && msg.type !== "ToolMessage"
+                  }
+                  isStreaming={
+                    streaming &&
+                    i === messages.length - 1 &&
+                    (msg.type === "AIMessage" ||
+                      msg.type === "AIMessageChunk" ||
+                      (msg.type === "ToolMessage" && !msg.content && !msg.isError))
+                  }
                 />
               </div>
             ))}
 
-            {streaming && (
-              <div className="flex w-full max-w-2xl mx-auto px-6">
-                <Spinner />
+            {needsThinkingBubble(messages, streaming) && (
+              <div className="msg-in">
+                <ChatMessage
+                  message={{
+                    id: "streaming-thinking",
+                    type: "AIMessage",
+                    content: "",
+                  }}
+                  isStreaming
+                  showLabel={
+                    messages.length === 0 ||
+                    messages[messages.length - 1]?.type === "HumanMessage"
+                  }
+                />
               </div>
             )}
 
@@ -228,7 +370,7 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
           </main>
 
           {hasThread && (
-            <footer className="px-4 sm:px-6 py-4 shrink-0 border-t border-border">
+            <footer className="px-8 sm:px-10 py-4 shrink-0 border-t border-border">
               <div className="flex w-full max-w-2xl mx-auto items-end gap-2 rounded-[var(--radius)] border border-border bg-surface p-2 focus-within:border-primary transition-[border-color] duration-150">
                 <textarea
                   ref={textareaRef}
@@ -247,30 +389,67 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
                 />
                 <Button
                   size="icon"
-                  onClick={sendMessage}
-                  disabled={!input.trim() || streaming}
-                  aria-label="Send message"
+                  variant={streaming ? "secondary" : "default"}
+                  onClick={streaming ? stopStreaming : sendMessage}
+                  disabled={!streaming && !input.trim()}
+                  aria-label={streaming ? "Stop generating" : "Send message"}
                 >
-                  <Send size={14} />
+                  {streaming ? (
+                    <Square size={12} fill="currentColor" />
+                  ) : (
+                    <Send size={14} />
+                  )}
                 </Button>
               </div>
-              <p className="text-center mt-2 text-xs text-muted-foreground">
-                Enter to send · Shift+Enter for newline
-                {tokenUsage && (
-                  <span className="font-data text-foreground-faint">
-                    {" "}
-                    · {tokenUsage.input_tokens.toLocaleString()} in ·{" "}
-                    {tokenUsage.output_tokens.toLocaleString()} out ·{" "}
-                    {tokenUsage.total_tokens.toLocaleString()} total
-                  </span>
-                )}
-              </p>
+              <div className="flex w-full max-w-2xl mx-auto mt-2 items-center justify-between gap-2">
+                <p className="text-[11px] font-data text-foreground-faint truncate">
+                  {activeModelName}
+                  {activeRepo && (
+                    <>
+                      {" · "}
+                      {activeRepo}
+                    </>
+                  )}
+                </p>
+                <p className="text-xs text-muted-foreground shrink-0">
+                  {tokenUsage && (
+                    <span className="font-data text-foreground-faint">
+                      {" "}
+                      · {tokenUsage.input_tokens.toLocaleString()} in ·{" "}
+                      {tokenUsage.output_tokens.toLocaleString()} out ·{" "}
+                      {tokenUsage.total_tokens.toLocaleString()} total
+                    </span>
+                  )}
+                </p>
+              </div>
             </footer>
           )}
         </div>
 
-        {currentThread?.repo && (
-          <RepoFileTree activeRepo={currentThread.repo} className="hidden lg:flex" />
+        {currentThread?.repo && workspaceHydrated && (
+          <>
+            {workspaceOpen ? (
+              <RepoFileTree
+                activeRepo={currentThread.repo}
+                threadId={threadIdFromUrl}
+                streaming={streaming}
+                className="hidden lg:flex"
+                onCollapse={toggleWorkspace}
+              />
+            ) : (
+              <div className="hidden lg:flex shrink-0 border-l border-border bg-surface">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="m-1 h-8 w-8"
+                  onClick={toggleWorkspace}
+                  aria-label="Open workspace"
+                >
+                  <PanelRightOpen size={16} className="text-muted-foreground" />
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

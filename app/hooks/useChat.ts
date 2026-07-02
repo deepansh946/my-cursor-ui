@@ -6,12 +6,21 @@ import { useRouter } from "next/navigation";
 import { Message, Thread, TokenUsage } from "../types";
 import { createThread, loadThreads, saveThreads } from "../lib/storage";
 import { getThreadRepo, removeThreadRepo, saveThreadRepo } from "../lib/threadRepos";
-import { callApi, deleteThread, fetchThreadMessages } from "../services/chat";
+import { getThreadModel, removeThreadModel, saveThreadModel } from "../lib/threadModels";
+import {
+  isThreadCloned,
+  markThreadCloned,
+  removeThreadCloned,
+} from "../lib/threadClone";
+import { callApi, cloneRepo, deleteThread, fetchThreadMessages, isBootstrapCloneMessage, abortStream } from "../services/chat";
 
 export function useChat(
   threadIdFromUrl: string | null,
   selectedRepo: string | null,
   reposHydrated: boolean,
+  selectedModel: string | null,
+  modelsHydrated: boolean,
+  defaultModelId: string,
 ) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -24,30 +33,49 @@ export function useChat(
   const [usageByThread, setUsageByThread] = useState<Record<string, TokenUsage>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const streamingMessagesRef = useRef<Message[]>([]);
 
   const threadsForView = useMemo(() => {
-    if (!reposHydrated) return threads;
+    if (!reposHydrated && !modelsHydrated) return threads;
     return threads.map((t) => {
-      if (t.repo) return t;
-      const stored = getThreadRepo(t.id);
-      return stored ? { ...t, repo: stored } : t;
+      let next = t;
+      if (reposHydrated && !t.repo) {
+        const storedRepo = getThreadRepo(t.id);
+        if (storedRepo) next = { ...next, repo: storedRepo };
+      }
+      if (modelsHydrated && !t.model) {
+        const storedModel = getThreadModel(t.id);
+        if (storedModel) next = { ...next, model: storedModel };
+      }
+      return next;
     });
-  }, [threads, reposHydrated]);
+  }, [threads, reposHydrated, modelsHydrated]);
 
   const resolveRepo = (threadId: string): string | null => {
     const fromThread = threadsForView.find((t) => t.id === threadId)?.repo;
     return fromThread ?? getThreadRepo(threadId) ?? selectedRepo;
   };
 
+  const resolveModel = (threadId: string): string => {
+    const fromThread = threadsForView.find((t) => t.id === threadId)?.model;
+    return (
+      fromThread ??
+      getThreadModel(threadId) ??
+      selectedModel ??
+      defaultModelId
+    );
+  };
+
   const currentThread = threadIdFromUrl
     ? threadsForView.find((t) => t.id === threadIdFromUrl)
     : undefined;
 
-  const { data: checkpointMessages } = useQuery({
+  const { data: checkpointMessages, isLoading: messagesLoading } = useQuery({
     queryKey: ["thread-messages", threadIdFromUrl],
     queryFn: () => fetchThreadMessages(threadIdFromUrl!),
     enabled: !!threadIdFromUrl,
     staleTime: 0,
+    placeholderData: (prev) => prev,
   });
 
   const messages = streaming ? streamingMessages : (checkpointMessages ?? []);
@@ -69,9 +97,22 @@ export function useChat(
   }, [queryClient, threadIdFromUrl]);
 
   const handleStreamEnd = useCallback(async () => {
+    const errors = streamingMessagesRef.current.filter((m) => m.isError);
     await refetchMessages();
+    if (errors.length > 0 && threadIdFromUrl) {
+      queryClient.setQueryData<Message[]>(
+        ["thread-messages", threadIdFromUrl],
+        (old) => {
+          const base = old ?? [];
+          const toAdd = errors.filter(
+            (e) => !base.some((b) => b.isError && b.content === e.content),
+          );
+          return toAdd.length > 0 ? [...base, ...toAdd] : base;
+        },
+      );
+    }
     setStreamingMessages([]);
-  }, [refetchMessages]);
+  }, [refetchMessages, threadIdFromUrl, queryClient]);
 
   useEffect(() => {
     setStreamingMessages([]);
@@ -91,7 +132,11 @@ export function useChat(
   }, [messages]);
 
   const updateStreamingMessages = (updater: (prev: Message[]) => Message[]) => {
-    setStreamingMessages(updater);
+    setStreamingMessages((prev) => {
+      const next = updater(prev);
+      streamingMessagesRef.current = next;
+      return next;
+    });
   };
 
   const bindRepoToThread = (threadId: string, repo: string | null) => {
@@ -102,38 +147,55 @@ export function useChat(
     );
   };
 
-  const bootstrapRepo = async (threadId: string, repo: string) => {
-    saveThreadRepo(threadId, repo);
-    const text = "Clone the repository.";
-    const humanMsg: Message = {
-      id: crypto.randomUUID(),
-      type: "HumanMessage",
-      content: text,
-    };
+  const bindModelToThread = (threadId: string, modelId: string) => {
+    if (!modelId) return;
+    saveThreadModel(threadId, modelId);
+    setThreads((prev) =>
+      prev.map((t) => (t.id === threadId ? { ...t, model: modelId } : t)),
+    );
+  };
 
+  const bootstrapRepo = async (threadId: string, repo: string) => {
+    if (threadIdFromUrl && threadId !== threadIdFromUrl) return;
+
+    saveThreadRepo(threadId, repo);
     setThreads((prev) =>
       prev.map((t) =>
-        t.id === threadId
-          ? {
-              ...t,
-              repo: t.repo ?? repo,
-              title: t.title === "New chat" ? "Setting up repo…" : t.title,
-            }
-          : t,
+        t.id === threadId ? { ...t, repo: t.repo ?? repo } : t,
       ),
     );
 
-    setStreamingMessages([...(checkpointMessages ?? []), humanMsg]);
+    const cloneId = crypto.randomUUID();
+    setStreamingMessages([
+      ...(checkpointMessages ?? []),
+      {
+        id: cloneId,
+        type: "ToolMessage",
+        content: "",
+        toolName: "clone_repo",
+      },
+    ]);
+    setStreaming(true);
 
-    await callApi({
-      text,
-      threadId,
-      repo,
-      updateMessages: updateStreamingMessages,
-      setStreaming,
-      onUsage: (usage) => handleUsage(threadId, usage),
-      onStreamEnd: handleStreamEnd,
-    });
+    let failed = false;
+    try {
+      await cloneRepo(threadId, repo);
+      markThreadCloned(threadId, repo);
+    } catch (err) {
+      failed = true;
+      setStreamingMessages((prev) => [
+        ...prev.filter((m) => m.id !== cloneId),
+        {
+          id: crypto.randomUUID(),
+          type: "AIMessage",
+          content: `Error: ${err instanceof Error ? err.message : "Clone failed"}`,
+          isError: true,
+        },
+      ]);
+    } finally {
+      setStreaming(false);
+      if (!failed) setStreamingMessages([]);
+    }
   };
 
   const handleNewThread = (opts?: { pickRepo?: boolean }): string => {
@@ -158,6 +220,8 @@ export function useChat(
     if (streaming) return null;
     removeThread(id);
     removeThreadRepo(id);
+    removeThreadModel(id);
+    removeThreadCloned(id);
     queryClient.removeQueries({ queryKey: ["thread-messages", id] });
 
     const next = threads.filter((t) => t.id !== id);
@@ -179,7 +243,8 @@ export function useChat(
     if (!threadIdFromUrl || !text || streaming) return;
 
     const base = checkpointMessages ?? [];
-    const isFirstMessage = base.length === 0;
+    const userMessages = base.filter((m) => !isBootstrapCloneMessage(m));
+    const isFirstMessage = userMessages.length === 0;
     const humanMsg: Message = {
       id: crypto.randomUUID(),
       type: "HumanMessage",
@@ -189,12 +254,17 @@ export function useChat(
     setInput("");
 
     const repoForApi = resolveRepo(threadIdFromUrl);
+    const modelForApi = resolveModel(threadIdFromUrl);
+    if (isFirstMessage) {
+      bindModelToThread(threadIdFromUrl, modelForApi);
+    }
     setThreads((prev) =>
       prev.map((t) => {
         if (t.id !== threadIdFromUrl) return t;
         return {
           ...t,
           repo: t.repo ?? repoForApi,
+          model: t.model ?? modelForApi,
           title: isFirstMessage ? text.slice(0, 40) : t.title,
         };
       }),
@@ -206,6 +276,7 @@ export function useChat(
       text,
       threadId: threadIdFromUrl,
       repo: repoForApi,
+      modelId: modelForApi,
       updateMessages: updateStreamingMessages,
       setStreaming,
       onUsage: (usage) => handleUsage(threadIdFromUrl, usage),
@@ -221,10 +292,12 @@ export function useChat(
     );
     setStreamingMessages(base);
     const repoForApi = resolveRepo(threadIdFromUrl);
+    const modelForApi = resolveModel(threadIdFromUrl);
     await callApi({
       text,
       threadId: threadIdFromUrl,
       repo: repoForApi,
+      modelId: modelForApi,
       updateMessages: updateStreamingMessages,
       setStreaming,
       onUsage: (usage) => handleUsage(threadIdFromUrl, usage),
@@ -240,10 +313,16 @@ export function useChat(
     }
   };
 
+  const stopStreaming = useCallback(() => {
+    abortStream();
+  }, []);
+
   return {
     threads: threadsForView,
     currentThreadId: threadIdFromUrl ?? "",
     messages,
+    messagesLoading,
+    checkpointMessages,
     input,
     setInput,
     streaming,
@@ -254,9 +333,12 @@ export function useChat(
     handleSelectThread,
     handleDeleteThread,
     bindRepoToThread,
+    bindModelToThread,
     bootstrapRepo,
+    resolveModel,
     sendMessage,
     retryMessage,
+    stopStreaming,
     handleKeyDown,
   };
 }

@@ -17,7 +17,7 @@ export default function LoginPage() {
           variant="default"
           size="lg"
           className="w-full"
-          onClick={() => signIn("github", { callbackUrl: "/" })}
+          onClick={() => signIn("github", { callbackUrl: "/chat" })}
         >
           Continue with GitHub
         </Button>
