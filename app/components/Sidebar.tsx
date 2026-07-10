@@ -7,6 +7,16 @@ import { threadDisplayTitle, modelShortName } from "../lib/threadDisplay";
 import { Button } from "./ui/Button";
 import { Label } from "./ui/Label";
 
+function resolveModelLabel(
+  thread: Thread,
+  defaultModelId: string,
+  models: LlmModel[],
+): string {
+  const id = thread.model ?? defaultModelId;
+  const full = models.find((m) => m.id === id)?.name ?? id;
+  return modelShortName(full);
+}
+
 export function Sidebar({
   threads,
   currentThreadId,
@@ -29,12 +39,6 @@ export function Sidebar({
   className?: string;
 }) {
   const sorted = [...threads].sort((a, b) => b.createdAt - a.createdAt);
-
-  function resolveModelLabel(thread: Thread): string {
-    const id = thread.model ?? defaultModelId;
-    const full = models.find((m) => m.id === id)?.name ?? id;
-    return modelShortName(full);
-  }
 
   return (
     <div
@@ -78,7 +82,7 @@ export function Sidebar({
                   </p>
                 )}
                 <p className="text-[11px] text-foreground-faint mt-0.5 font-data">
-                  {resolveModelLabel(t)}
+                  {resolveModelLabel(t, defaultModelId, models)}
                 </p>
               </button>
               <button

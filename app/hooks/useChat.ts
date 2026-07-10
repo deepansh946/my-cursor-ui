@@ -12,7 +12,7 @@ import {
   markThreadCloned,
   removeThreadCloned,
 } from "../lib/threadClone";
-import { callApi, cloneRepo, deleteThread, fetchThreadMessages, isBootstrapCloneMessage, abortStream } from "../services/chat";
+import { callApi, cloneRepo, deleteThread, fetchThreadMessages, abortStream } from "../services/chat";
 
 export function useChat(
   threadIdFromUrl: string | null,
@@ -243,8 +243,7 @@ export function useChat(
     if (!threadIdFromUrl || !text || streaming) return;
 
     const base = checkpointMessages ?? [];
-    const userMessages = base.filter((m) => !isBootstrapCloneMessage(m));
-    const isFirstMessage = userMessages.length === 0;
+    const isFirstMessage = base.length === 0;
     const humanMsg: Message = {
       id: crypto.randomUUID(),
       type: "HumanMessage",

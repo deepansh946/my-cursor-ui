@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, ChevronDown, ChevronRight, X, Zap } from "lucide-react";
 import { Spinner } from "./ui/Spinner";
+import { stripWorkspacePath, stripWorkspacePathInText } from "../lib/displayPath";
 
 const TOOL_LABELS: Record<string, string> = {
   indexer: "Indexing files",
@@ -34,7 +35,9 @@ export function ToolBlock({
   isError?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const canExpand = EXPANDABLE_TOOLS.has(toolName) && !!content?.trim();
+  const displayTarget = target ? stripWorkspacePath(target) : undefined;
+  const displayContent = content ? stripWorkspacePathInText(content) : content;
+  const canExpand = EXPANDABLE_TOOLS.has(toolName) && !!displayContent?.trim();
   const label = TOOL_LABELS[toolName] ?? toolName;
 
   return (
@@ -66,15 +69,15 @@ export function ToolBlock({
           </button>
         )}
       </div>
-      {target && (
-        <span className="font-data text-foreground-faint break-all pl-5">{target}</span>
+      {displayTarget && (
+        <span className="font-data text-foreground-faint break-all pl-5">{displayTarget}</span>
       )}
-      {isError && content && (
-        <span className="font-data text-destructive text-[11px] break-words pl-5">{content}</span>
+      {isError && displayContent && (
+        <span className="font-data text-destructive text-[11px] break-words pl-5">{displayContent}</span>
       )}
-      {canExpand && expanded && content && (
+      {canExpand && expanded && displayContent && (
         <pre className="font-data text-[11px] text-foreground-faint mt-1 pl-5 whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-          {content}
+          {displayContent}
         </pre>
       )}
     </div>

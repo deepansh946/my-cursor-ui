@@ -19,7 +19,6 @@ import { clearThreadRepos } from "../lib/threadRepos";
 import { clearThreadModels } from "../lib/threadModels";
 import { clearSelectedModel } from "../lib/selectedModels";
 import { isThreadCloned, clearThreadCloned } from "../lib/threadClone";
-import { isBootstrapCloneMessage } from "../services/chat";
 import { threadDisplayTitle } from "../lib/threadDisplay";
 import { loadWorkspaceOpen, saveWorkspaceOpen } from "../lib/workspacePanel";
 import { Button } from "./ui/Button";
@@ -122,10 +121,9 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
     });
   }, []);
 
-  const hasUserMessages =
-    (checkpointMessages ?? []).some(
-      (m) => m.type === "HumanMessage" && !isBootstrapCloneMessage(m),
-    );
+  const hasUserMessages = (checkpointMessages ?? []).some(
+    (m) => m.type === "HumanMessage",
+  );
   const activeModelId = threadIdFromUrl
     ? resolveModel(threadIdFromUrl)
     : (selectedModel ?? defaultModelId);

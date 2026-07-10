@@ -8,6 +8,7 @@ import { TerminalBlock } from "./TerminalBlock";
 import { CodeBlock } from "./CodeBlock";
 import { ThinkingDots, StreamCursor } from "./StreamingIndicator";
 import { parseContent } from "../lib/parseContent";
+import { stripWorkspacePathInText } from "../lib/displayPath";
 import { Label } from "./ui/Label";
 
 const COLLAPSE_MAX_PX = 600;
@@ -77,9 +78,11 @@ function CollapsibleContent({
     setNeedsCollapse(el.scrollHeight > COLLAPSE_MAX_PX);
   }, [content, isHuman]);
 
+  const displayContent = stripWorkspacePathInText(content);
+
   const body = (
     <>
-      {parseContent(content).map((seg, i) =>
+      {parseContent(displayContent).map((seg, i) =>
         seg.kind === "code" ? (
           <CodeBlock key={i} lang={seg.lang} code={seg.code} />
         ) : (
@@ -140,6 +143,7 @@ export function ChatMessage({
   inlineTool?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isHuman = message.type === "HumanMessage";
   const isTool = message.type === "ToolMessage";
   const isToolError = isTool && message.isError;
@@ -148,8 +152,15 @@ export function ChatMessage({
   const copyContent = useCallback(() => {
     navigator.clipboard.writeText(message.content);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
   }, [message.content]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
 
   const spacing = isContinuation ? "pb-1" : inlineTool ? "pb-1" : "pb-2";
 

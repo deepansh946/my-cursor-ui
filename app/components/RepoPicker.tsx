@@ -16,10 +16,11 @@ function RepoPickerPanel({
 }: {
   selected: string | null;
   onClose: () => void;
-  onSave: (repo: string | null) => void;
+  onSave: (repo: string | null) => void | Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState<string | null>(selected);
+  const [saving, setSaving] = useState(false);
   const { data: list = [], isLoading, isError, error } = useGithubRepos(true);
 
   const filtered = useMemo(() => {
@@ -130,12 +131,18 @@ function RepoPickerPanel({
             Cancel
           </Button>
           <Button
-            onClick={() => {
-              onSave(draft);
-              onClose();
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await onSave(draft);
+                onClose();
+              } finally {
+                setSaving(false);
+              }
             }}
           >
-            Save
+            {saving ? "Saving…" : "Save"}
           </Button>
         </div>
       </div>
@@ -152,7 +159,7 @@ export function RepoPicker({
   open: boolean;
   onClose: () => void;
   selected: string | null;
-  onSave: (repo: string | null) => void;
+  onSave: (repo: string | null) => void | Promise<void>;
 }) {
   if (!open) return null;
 

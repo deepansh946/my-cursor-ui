@@ -3,15 +3,6 @@ import { apiFetch } from "../lib/apiClient";
 import { getSession } from "next-auth/react";
 import { contentToString } from "../lib/content";
 
-export const BOOTSTRAP_CLONE_MESSAGE = "Clone the repository.";
-
-export function isBootstrapCloneMessage(m: {
-  type: string;
-  content: string;
-}): boolean {
-  return m.type === "HumanMessage" && m.content.trim() === BOOTSTRAP_CLONE_MESSAGE;
-}
-
 function isToolErrorContent(content: string): boolean {
   if (
     content.startsWith("Error") ||
@@ -81,24 +72,22 @@ export async function fetchThreadMessages(threadId: string): Promise<Message[]> 
       subtype?: string;
     }>;
   };
-  return (data.messages ?? [])
-    .filter((m) => !isBootstrapCloneMessage({ type: m.type, content: contentToString(m.content) }))
-    .map((m) => {
-    const raw = contentToString(m.content);
-    const isError = m.type === "ToolMessage" ? isToolErrorContent(raw) : false;
-    const content =
-      m.type === "ToolMessage" && isError ? formatToolErrorContent(raw) : raw;
-    return {
-      id: m.id,
-      type: m.type as MessageType,
-      content,
-      toolName: m.tool_name,
-      toolTarget: m.tool_target,
-      toolCallId: m.tool_call_id,
-      subtype: m.subtype,
-      isError,
-    };
-  });
+  return (data.messages ?? []).map((m) => {
+      const raw = contentToString(m.content);
+      const isError = m.type === "ToolMessage" ? isToolErrorContent(raw) : false;
+      const content =
+        m.type === "ToolMessage" && isError ? formatToolErrorContent(raw) : raw;
+      return {
+        id: m.id,
+        type: m.type as MessageType,
+        content,
+        toolName: m.tool_name,
+        toolTarget: m.tool_target,
+        toolCallId: m.tool_call_id,
+        subtype: m.subtype,
+        isError,
+      };
+    });
 }
 
 export async function fetchModels(): Promise<{ models: LlmModel[]; default: string }> {
@@ -344,7 +333,9 @@ async function streamChat(
       },
     ]);
   } finally {
-    if (activeAbort === controller) activeAbort = null;
+    const isCurrent = activeAbort === controller;
+    if (isCurrent) activeAbort = null;
+    if (!isCurrent) return;
     await opts.onStreamEnd?.();
     opts.setStreaming(false);
     opts.onDone?.();
