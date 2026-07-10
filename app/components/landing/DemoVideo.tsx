@@ -24,7 +24,7 @@ export function DemoVideo() {
           playsInline
           preload="metadata"
         >
-          <source src="/demo.mov" type="video/mp4" />
+          <source src="/demo.mp4" type="video/mp4" />
         </video>
         )
       </Panel>

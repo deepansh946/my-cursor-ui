@@ -92,7 +92,7 @@ export async function fetchThreadMessages(threadId: string): Promise<Message[]> 
 
 export async function fetchModels(): Promise<{ models: LlmModel[]; default: string }> {
   const res = await apiFetch("/models");
-  if (!res.ok) return { models: [], default: "gemini-2.5-flash" };
+  if (!res.ok) return { models: [], default: "auto" };
   return (await res.json()) as { models: LlmModel[]; default: string };
 }
 
