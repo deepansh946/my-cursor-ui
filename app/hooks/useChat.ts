@@ -13,6 +13,7 @@ import {
   removeThreadCloned,
 } from "../lib/threadClone";
 import { callApi, cloneRepo, deleteThread, fetchThreadMessages, abortStream } from "../services/chat";
+import { loadPlanMode, savePlanMode } from "../lib/planMode";
 
 export function useChat(
   threadIdFromUrl: string | null,
@@ -31,6 +32,10 @@ export function useChat(
   const [streaming, setStreaming] = useState(false);
   const [streamingMessages, setStreamingMessages] = useState<Message[]>([]);
   const [usageByThread, setUsageByThread] = useState<Record<string, TokenUsage>>({});
+  const [planMode, setPlanMode] = useState(() =>
+    typeof window !== "undefined" ? loadPlanMode() : false,
+  );
+  const [lastResponseWasPlan, setLastResponseWasPlan] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const streamingMessagesRef = useRef<Message[]>([]);
@@ -79,6 +84,20 @@ export function useChat(
   });
 
   const messages = streaming ? streamingMessages : (checkpointMessages ?? []);
+  const displayMessages = useMemo(() => {
+    if (!lastResponseWasPlan || streaming) return messages;
+    let lastAi = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].type === "AIMessage" && !messages[i].isError) {
+        lastAi = i;
+        break;
+      }
+    }
+    if (lastAi === -1) return messages;
+    return messages.map((m, i) =>
+      i === lastAi ? { ...m, isPlan: true } : m,
+    );
+  }, [messages, lastResponseWasPlan, streaming]);
   const tokenUsage = threadIdFromUrl ? usageByThread[threadIdFromUrl] : undefined;
 
   const handleUsage = useCallback((threadId: string, usage: TokenUsage) => {
@@ -116,6 +135,7 @@ export function useChat(
 
   useEffect(() => {
     setStreamingMessages([]);
+    setLastResponseWasPlan(false);
   }, [threadIdFromUrl]);
 
   useEffect(() => {
@@ -238,6 +258,12 @@ export function useChat(
     return null;
   };
 
+  const togglePlanMode = (v: boolean) => {
+    setPlanMode(v);
+    savePlanMode(v);
+    if (!v) setLastResponseWasPlan(false);
+  };
+
   const sendMessage = async () => {
     const text = input.trim();
     if (!threadIdFromUrl || !text || streaming) return;
@@ -251,6 +277,7 @@ export function useChat(
     };
 
     setInput("");
+    setLastResponseWasPlan(false);
 
     const repoForApi = resolveRepo(threadIdFromUrl);
     const modelForApi = resolveModel(threadIdFromUrl);
@@ -276,6 +303,34 @@ export function useChat(
       threadId: threadIdFromUrl,
       repo: repoForApi,
       modelId: modelForApi,
+      planMode,
+      updateMessages: updateStreamingMessages,
+      setStreaming,
+      onUsage: (usage) => handleUsage(threadIdFromUrl, usage),
+      onPlanComplete: () => setLastResponseWasPlan(true),
+      onStreamEnd: handleStreamEnd,
+      onDone: () => textareaRef.current?.focus(),
+    });
+  };
+
+  const applyPlan = async () => {
+    if (!threadIdFromUrl || streaming) return;
+    togglePlanMode(false);
+    setLastResponseWasPlan(false);
+    const base = checkpointMessages ?? [];
+    const text = "Apply the plan as specified above.";
+    const humanMsg: Message = {
+      id: crypto.randomUUID(),
+      type: "HumanMessage",
+      content: text,
+    };
+    setStreamingMessages([...base, humanMsg]);
+    await callApi({
+      text,
+      threadId: threadIdFromUrl,
+      repo: resolveRepo(threadIdFromUrl),
+      modelId: resolveModel(threadIdFromUrl),
+      planMode: false,
       updateMessages: updateStreamingMessages,
       setStreaming,
       onUsage: (usage) => handleUsage(threadIdFromUrl, usage),
@@ -286,6 +341,7 @@ export function useChat(
 
   const retryMessage = async (text: string, errorMsgId: string) => {
     if (!threadIdFromUrl || streaming) return;
+    setLastResponseWasPlan(false);
     const base = (streaming ? streamingMessages : (checkpointMessages ?? [])).filter(
       (m) => m.id !== errorMsgId,
     );
@@ -297,9 +353,11 @@ export function useChat(
       threadId: threadIdFromUrl,
       repo: repoForApi,
       modelId: modelForApi,
+      planMode,
       updateMessages: updateStreamingMessages,
       setStreaming,
       onUsage: (usage) => handleUsage(threadIdFromUrl, usage),
+      onPlanComplete: () => setLastResponseWasPlan(true),
       onStreamEnd: handleStreamEnd,
       onDone: () => textareaRef.current?.focus(),
     });
@@ -319,13 +377,16 @@ export function useChat(
   return {
     threads: threadsForView,
     currentThreadId: threadIdFromUrl ?? "",
-    messages,
+    messages: displayMessages,
     messagesLoading,
     checkpointMessages,
     input,
     setInput,
     streaming,
     tokenUsage,
+    planMode,
+    togglePlanMode,
+    applyPlan,
     bottomRef,
     textareaRef,
     handleNewThread,

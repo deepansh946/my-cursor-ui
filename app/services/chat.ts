@@ -141,6 +141,7 @@ interface StreamContext {
   text: string;
   updateMessages: (updater: (prev: Message[]) => Message[]) => void;
   onUsage?: (usage: TokenUsage) => void;
+  onPlanComplete?: () => void;
 }
 
 async function processSseStream(
@@ -178,6 +179,18 @@ async function processSseStream(
           output_tokens: chunk.output_tokens ?? 0,
           total_tokens: chunk.total_tokens ?? 0,
         });
+      } else if (chunk.type === "plan_complete") {
+        ctx.updateMessages((prev) => {
+          const lastAiIdx = [...prev]
+            .reverse()
+            .findIndex((m) => m.type === "AIMessage");
+          if (lastAiIdx === -1) return prev;
+          const idx = prev.length - 1 - lastAiIdx;
+          return prev.map((m, i) =>
+            i === idx ? { ...m, isPlan: true } : m,
+          );
+        });
+        ctx.onPlanComplete?.();
       } else if (chunk.type === "AIMessage" || chunk.type === "AIMessageChunk") {
         const piece = contentToString(chunk.content);
         if (!piece.trim()) continue;
@@ -285,6 +298,7 @@ interface StreamChatOptions {
   updateMessages: (updater: (prev: Message[]) => Message[]) => void;
   setStreaming: (v: boolean) => void;
   onUsage?: (usage: TokenUsage) => void;
+  onPlanComplete?: () => void;
   onDone?: () => void;
   onStreamEnd?: () => void | Promise<void>;
 }
@@ -319,6 +333,7 @@ async function streamChat(
       text,
       updateMessages: opts.updateMessages,
       onUsage: opts.onUsage,
+      onPlanComplete: opts.onPlanComplete,
     });
   } catch (err) {
     if (controller.signal.aborted) return;
@@ -345,6 +360,7 @@ async function streamChat(
 interface CallApiOptions extends StreamChatOptions {
   text: string;
   modelId: string;
+  planMode?: boolean;
 }
 
 export async function callApi({
@@ -352,9 +368,11 @@ export async function callApi({
   threadId,
   repo = null,
   modelId,
+  planMode = false,
   updateMessages,
   setStreaming,
   onUsage,
+  onPlanComplete,
   onDone,
   onStreamEnd,
 }: CallApiOptions) {
@@ -366,9 +384,19 @@ export async function callApi({
       thread_id: threadId,
       repo: repo ?? null,
       model_id: modelId,
+      plan_mode: planMode,
       github_token: session?.accessToken ?? "",
     },
     text,
-    { threadId, repo, updateMessages, setStreaming, onUsage, onDone, onStreamEnd },
+    {
+      threadId,
+      repo,
+      updateMessages,
+      setStreaming,
+      onUsage,
+      onPlanComplete,
+      onDone,
+      onStreamEnd,
+    },
   );
 }

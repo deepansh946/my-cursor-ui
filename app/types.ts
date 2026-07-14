@@ -22,6 +22,7 @@ export interface Message {
   subtype?: string;
   isError?: boolean;
   retryText?: string;
+  isPlan?: boolean;
 }
 
 export interface Thread {

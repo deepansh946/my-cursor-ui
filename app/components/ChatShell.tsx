@@ -84,6 +84,9 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
     retryMessage,
     stopStreaming,
     handleKeyDown,
+    planMode,
+    togglePlanMode,
+    applyPlan,
   } = useChat(
     threadIdFromUrl,
     selectedRepo,
@@ -331,6 +334,7 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
                 <ChatMessage
                   message={msg}
                   onRetry={retryMessage}
+                  onApplyPlan={msg.isPlan ? applyPlan : undefined}
                   retryText={lastHumanText(messages, i)}
                   showLabel={showLabelFor(messages, i)}
                   isContinuation={
@@ -400,15 +404,25 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
                 </Button>
               </div>
               <div className="flex w-full max-w-2xl mx-auto mt-2 items-center justify-between gap-2">
-                <p className="text-[11px] font-data text-foreground-faint truncate">
-                  {activeModelName}
-                  {activeRepo && (
-                    <>
-                      {" · "}
-                      {activeRepo}
-                    </>
-                  )}
-                </p>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Button
+                    size="sm"
+                    variant={planMode ? "default" : "secondary"}
+                    onClick={() => togglePlanMode(!planMode)}
+                    disabled={streaming}
+                  >
+                    {planMode ? "Plan Mode ON" : "Plan"}
+                  </Button>
+                  <p className="text-[11px] font-data text-foreground-faint truncate">
+                    {activeModelName}
+                    {activeRepo && (
+                      <>
+                        {" · "}
+                        {activeRepo}
+                      </>
+                    )}
+                  </p>
+                </div>
                 <p className="text-xs text-muted-foreground shrink-0">
                   {tokenUsage && (
                     <span className="font-data text-foreground-faint">

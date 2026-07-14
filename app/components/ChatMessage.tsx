@@ -6,6 +6,7 @@ import { Message } from "../types";
 import { ToolBlock } from "./ToolBlock";
 import { TerminalBlock } from "./TerminalBlock";
 import { CodeBlock } from "./CodeBlock";
+import { PlanCard } from "./PlanCard";
 import { ThinkingDots, StreamCursor } from "./StreamingIndicator";
 import { parseContent } from "../lib/parseContent";
 import { stripWorkspacePathInText } from "../lib/displayPath";
@@ -128,6 +129,7 @@ function CollapsibleContent({
 export function ChatMessage({
   message,
   onRetry,
+  onApplyPlan,
   isStreaming,
   showLabel = true,
   isContinuation = false,
@@ -136,6 +138,7 @@ export function ChatMessage({
 }: {
   message: Message;
   onRetry?: (text: string, id: string) => void;
+  onApplyPlan?: () => void;
   isStreaming?: boolean;
   showLabel?: boolean;
   isContinuation?: boolean;
@@ -163,6 +166,15 @@ export function ChatMessage({
   }, []);
 
   const spacing = isContinuation ? "pb-1" : inlineTool ? "pb-1" : "pb-2";
+
+  if (message.isPlan) {
+    return (
+      <PlanCard
+        content={message.content}
+        onApply={!isStreaming ? onApplyPlan : undefined}
+      />
+    );
+  }
 
   if (isTool && !isToolError) {
     const inner =
