@@ -39,16 +39,20 @@ export function SessionContextBar({
   modelLocked: boolean;
   repoLabel: string;
   onModelClick: () => void;
-  onRepoClick: () => void;
-  onSignOut: () => void;
+  onRepoClick?: () => void;
+  onSignOut?: () => void;
 }) {
   return (
     <div className="flex items-center gap-2">
       <ContextPill label={modelName} locked={modelLocked} onClick={onModelClick} />
-      <ContextPill label={repoLabel} onClick={onRepoClick} />
-      <Button variant="ghost" size="sm" onClick={onSignOut}>
-        Sign out
-      </Button>
+      {onRepoClick && (
+        <ContextPill label={repoLabel} onClick={onRepoClick} />
+      )}
+      {onSignOut && (
+        <Button variant="ghost" size="sm" onClick={onSignOut}>
+          Sign out
+        </Button>
+      )}
     </div>
   );
 }

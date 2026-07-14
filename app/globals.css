@@ -38,11 +38,15 @@
   box-sizing: border-box;
 }
 
+html {
+  font-size: 17px;
+}
+
 body {
   background: var(--bg);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
-  font-size: 14px;
+  font-size: 1rem;
   -webkit-font-smoothing: antialiased;
 }
 

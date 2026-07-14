@@ -29,6 +29,12 @@ export function LandingNav() {
           ) : (
             <>
               <Link
+                href="/demo"
+                className={`${btnBase} bg-transparent text-foreground border border-border hover:bg-surface-raised`}
+              >
+                Try Demo
+              </Link>
+              <Link
                 href="/login"
                 className={`${btnBase} bg-transparent text-foreground border border-border hover:bg-surface-raised`}
               >

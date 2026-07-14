@@ -3,7 +3,7 @@
 import { repoSlug } from "../lib/threadDisplay";
 import { Button } from "./ui/Button";
 
-const SUGGESTED_PROMPTS = [
+const DEFAULT_PROMPTS = [
   "Fix the bugs present in the index.js file",
   "Create a new file called 'README.md' and add the project description",
   "Add a new component called 'Counter' to the index.js file to increment and decrement a counter",
@@ -15,12 +15,14 @@ export function ChatEmptyState({
   repo,
   onPickPrompt,
   onSelectRepo,
+  suggestedPrompts = DEFAULT_PROMPTS,
 }: {
   title: string;
   modelName: string;
   repo: string | null;
   onPickPrompt: (text: string) => void;
   onSelectRepo?: () => void;
+  suggestedPrompts?: string[];
 }) {
   const slug = repoSlug(repo);
 
@@ -56,7 +58,7 @@ export function ChatEmptyState({
           <p className="text-xs text-foreground-faint uppercase tracking-wide font-medium mb-1">
             Suggested
           </p>
-          {SUGGESTED_PROMPTS.map((prompt) => (
+          {suggestedPrompts.map((prompt) => (
             <Button
               key={prompt}
               variant="outline"

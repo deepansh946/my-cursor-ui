@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { Menu, PanelRightOpen, Send, Square, X } from "lucide-react";
 import { useChat } from "../hooks/useChat";
@@ -56,7 +57,17 @@ function readPendingPickRepo(threadId: string | null): string | null {
   return sessionStorage.getItem(PICK_REPO_KEY) === threadId ? threadId : null;
 }
 
-export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null }) {
+export function ChatShell({
+  threadIdFromUrl,
+  suggestedPrompts,
+  demoRepo,
+  className = "h-screen",
+}: {
+  threadIdFromUrl: string | null;
+  suggestedPrompts?: string[];
+  demoRepo?: string;
+  className?: string;
+}) {
   const { selectedRepo, setSelectedRepo, reposHydrated } = useSelectedRepos();
   const { selectedModel, setSelectedModel, modelsHydrated } = useSelectedModel();
   const { data: modelsData } = useModels();
@@ -115,6 +126,15 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
     setWorkspaceOpen(loadWorkspaceOpen());
     setWorkspaceHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!demoRepo || !threadIdFromUrl || streaming) return;
+    if (isThreadCloned(threadIdFromUrl, demoRepo)) {
+      bindRepoToThread(threadIdFromUrl, demoRepo);
+      return;
+    }
+    void bootstrapRepo(threadIdFromUrl, demoRepo);
+  }, [demoRepo, threadIdFromUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleWorkspace = useCallback(() => {
     setWorkspaceOpen((prev) => {
@@ -250,7 +270,7 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
   const emptyTitle = currentThread ? threadDisplayTitle(currentThread) : "New chat";
 
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className={`flex flex-col bg-background ${className}`}>
       <header className="flex items-center justify-between px-4 sm:px-6 py-3 shrink-0 border-b border-border">
         <div className="flex items-center gap-3">
           <Button
@@ -262,15 +282,20 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
           >
             {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
           </Button>
-          <span className="text-sm font-semibold tracking-tight text-foreground">Piper</span>
+          <Link
+            href="/"
+            className="text-sm font-semibold tracking-tight text-foreground"
+          >
+            Piper
+          </Link>
         </div>
         <SessionContextBar
           modelName={activeModelName}
           modelLocked={hasUserMessages}
           repoLabel={repoLabel}
           onModelClick={handleModelClick}
-          onRepoClick={() => setRepoOpen(true)}
-          onSignOut={handleLogout}
+          onRepoClick={demoRepo ? undefined : () => setRepoOpen(true)}
+          onSignOut={demoRepo ? undefined : handleLogout}
         />
       </header>
 
@@ -282,12 +307,14 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
         onSave={handleModelSave}
       />
 
-      <RepoPicker
-        open={repoOpen}
-        onClose={handleRepoClose}
-        selected={activeRepo}
-        onSave={handleRepoSave}
-      />
+      {!demoRepo && (
+        <RepoPicker
+          open={repoOpen}
+          onClose={handleRepoClose}
+          selected={activeRepo}
+          onSave={handleRepoSave}
+        />
+      )}
 
       {sidebarOpen && (
         <div
@@ -325,7 +352,8 @@ export function ChatShell({ threadIdFromUrl }: { threadIdFromUrl: string | null 
                 modelName={activeModelName}
                 repo={currentThread?.repo ?? activeRepo}
                 onPickPrompt={setInput}
-                onSelectRepo={() => setRepoOpen(true)}
+                onSelectRepo={demoRepo ? undefined : () => setRepoOpen(true)}
+                suggestedPrompts={suggestedPrompts}
               />
             )}
 

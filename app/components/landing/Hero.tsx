@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { GetStartedCta } from "./GetStartedCta";
 
 const btnLg =
@@ -22,12 +23,12 @@ export function Hero() {
           <GetStartedCta
             className={`${btnLg} bg-primary text-background border border-primary hover:bg-[var(--primary-hover)]`}
           />
-          <a
-            href="#demo"
+          <Link
+            href="/demo"
             className={`${btnLg} bg-transparent text-foreground border border-border hover:bg-surface-raised`}
           >
-            Watch demo
-          </a>
+            Try Demo
+          </Link>
         </div>
       </div>
     </section>
