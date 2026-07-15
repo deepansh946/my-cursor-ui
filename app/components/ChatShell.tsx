@@ -42,24 +42,39 @@ function InterruptBar({
       interruptState.options[1] === "no");
 
   return (
-    <div className="w-full max-w-2xl mx-auto mb-3 rounded-[var(--radius)] border border-border bg-surface-raised p-3 flex flex-col gap-2">
-      <p className="text-sm text-foreground">{interruptState.question}</p>
-      <div className="flex items-center gap-2 flex-wrap">
+    <div className="w-full max-w-2xl mx-auto mb-3 rounded-[var(--radius)] border border-primary/30 bg-surface overflow-hidden">
+      <div className="px-4 py-2 border-b border-border bg-surface-raised">
+        <span className="text-xs font-medium text-primary uppercase tracking-wide">
+          {isBinaryAction ? "Approval required" : "Your choice"}
+        </span>
+      </div>
+      <div className="px-4 py-3 flex flex-col gap-3">
+        <p className="text-sm text-foreground leading-relaxed">{interruptState.question}</p>
         {isBinaryAction ? (
-          <>
+          <div className="flex items-center gap-2">
             <Button size="sm" onClick={() => onResolve("yes")}>Approve</Button>
             <Button size="sm" variant="secondary" onClick={() => onResolve("no")}>Reject</Button>
-          </>
+          </div>
         ) : interruptState.options.length > 0 ? (
-          interruptState.options.map((opt) => (
-            <Button key={opt} size="sm" variant="secondary" onClick={() => onResolve(opt)}>
-              {opt}
-            </Button>
-          ))
+          <div className="flex flex-col gap-2">
+            {interruptState.options.map((opt, i) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => onResolve(opt)}
+                className="w-full flex items-start gap-3 text-left text-sm px-3 py-2.5 rounded-[var(--radius)] border border-border bg-surface-raised text-foreground hover:border-primary/60 hover:bg-surface transition-[border-color,background] duration-150"
+              >
+                <span className="shrink-0 mt-0.5 flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] bg-primary/15 text-primary text-xs font-semibold">
+                  {String.fromCharCode(65 + i)}
+                </span>
+                <span className="flex-1 min-w-0 leading-snug pt-0.5">{opt}</span>
+              </button>
+            ))}
+          </div>
         ) : (
-          <>
+          <div className="flex items-center gap-2">
             <input
-              className="flex-1 text-sm bg-transparent border border-border rounded px-2 py-1 focus:outline-none focus:border-primary"
+              className="flex-1 text-sm bg-transparent border border-border rounded-[var(--radius)] px-3 py-2 focus:outline-none focus:border-primary"
               value={freeText}
               onChange={(e) => setFreeText(e.target.value)}
               onKeyDown={(e) => {
@@ -77,7 +92,7 @@ function InterruptBar({
             >
               Send
             </Button>
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -93,7 +108,7 @@ function lastHumanText(messages: Message[], beforeIndex: number): string | undef
 
 function showLabelFor(messages: Message[], i: number): boolean {
   const msg = messages[i];
-  if (msg.type === "ToolMessage") return false;
+  if (msg.type === "ToolMessage" || msg.type === "interrupt") return false;
   if (i === 0) return true;
   const prev = messages[i - 1];
   if (msg.type === "HumanMessage") return prev.type !== "HumanMessage";
@@ -104,6 +119,7 @@ function needsThinkingBubble(messages: Message[], streaming: boolean): boolean {
   if (!streaming) return false;
   const last = messages[messages.length - 1];
   if (!last) return true;
+  if (last.type === "ToolMessage" && last.toolName === "ask_user") return false;
   if (last.type === "HumanMessage") return true;
   if (last.type === "ToolMessage" && !last.content && !last.isError) return false;
   if (last.type === "AIMessage" && last.content.trim()) return false;
@@ -428,20 +444,25 @@ export function ChatShell({
               />
             )}
 
-            {messages.map((msg, i) => (
+            {messages
+              .filter(
+                (msg) =>
+                  !(msg.type === "ToolMessage" && msg.toolName === "ask_user"),
+              )
+              .map((msg, i, visible) => (
               <div key={msg.id} className="msg-in">
                 <ChatMessage
                   message={msg}
                   onRetry={retryMessage}
                   onApplyPlan={msg.isPlan ? applyPlan : undefined}
-                  retryText={lastHumanText(messages, i)}
-                  showLabel={showLabelFor(messages, i)}
+                  retryText={lastHumanText(visible, i)}
+                  showLabel={showLabelFor(visible, i)}
                   isContinuation={
-                    i > 0 && !showLabelFor(messages, i) && msg.type !== "ToolMessage"
+                    i > 0 && !showLabelFor(visible, i) && msg.type !== "ToolMessage"
                   }
                   isStreaming={
                     streaming &&
-                    i === messages.length - 1 &&
+                    i === visible.length - 1 &&
                     (msg.type === "AIMessage" ||
                       msg.type === "AIMessageChunk" ||
                       (msg.type === "ToolMessage" && !msg.content && !msg.isError))
@@ -450,7 +471,7 @@ export function ChatShell({
               </div>
             ))}
 
-            {needsThinkingBubble(messages, streaming) && (
+            {needsThinkingBubble(messages, streaming) && !interruptState && (
               <div className="msg-in">
                 <ChatMessage
                   message={{

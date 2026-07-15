@@ -124,16 +124,38 @@ export function useChat(
 
   const handleStreamEnd = useCallback(async () => {
     const errors = streamingMessagesRef.current.filter((m) => m.isError);
+    const choices = streamingMessagesRef.current.filter((m) => m.type === "interrupt");
     await refetchMessages();
-    if (errors.length > 0 && threadIdFromUrl) {
+    if (threadIdFromUrl && (errors.length > 0 || choices.length > 0)) {
       queryClient.setQueryData<Message[]>(
         ["thread-messages", threadIdFromUrl],
         (old) => {
-          const base = old ?? [];
-          const toAdd = errors.filter(
-            (e) => !base.some((b) => b.isError && b.content === e.content),
-          );
-          return toAdd.length > 0 ? [...base, ...toAdd] : base;
+          let choiceIdx = 0;
+          let next = (old ?? []).flatMap((m) => {
+            if (m.type === "ToolMessage" && m.toolName === "ask_user") {
+              if (choiceIdx < choices.length) return [choices[choiceIdx++]];
+              const answer = m.content.replace(/^User response:\s*/i, "").trim();
+              return [
+                {
+                  id: m.id,
+                  type: "interrupt" as const,
+                  content: answer || m.content,
+                  toolName: "ask_user",
+                },
+              ];
+            }
+            return [m];
+          });
+          while (choiceIdx < choices.length) {
+            next = [...next, choices[choiceIdx++]];
+          }
+          if (errors.length > 0) {
+            const toAdd = errors.filter(
+              (e) => !next.some((b) => b.isError && b.content === e.content),
+            );
+            if (toAdd.length > 0) next = [...next, ...toAdd];
+          }
+          return next;
         },
       );
     }
@@ -392,11 +414,20 @@ export function useChat(
     interruptPendingRef.current = false;
     setInterruptState(null);
     // Seed from checkpoint only if stream list was cleared; otherwise resume on existing UI
-    if (streamingMessagesRef.current.length === 0) {
-      const base = checkpointMessages ?? [];
-      setStreamingMessages(base);
-      streamingMessagesRef.current = base;
-    }
+    const base =
+      streamingMessagesRef.current.length > 0
+        ? streamingMessagesRef.current
+        : (checkpointMessages ?? []);
+    const choiceMsg: Message = {
+      id: crypto.randomUUID(),
+      type: "interrupt",
+      content: answer,
+      interruptQuestion: saved.question,
+      toolName: saved.action || "ask_user",
+    };
+    const withChoice = [...base, choiceMsg];
+    setStreamingMessages(withChoice);
+    streamingMessagesRef.current = withChoice;
     setStreaming(true);
     await resumeInterrupt(saved.threadId, answer, saved.repo, saved.modelId, saved.planMode, {
       updateMessages: updateStreamingMessages,

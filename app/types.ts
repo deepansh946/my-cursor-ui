@@ -24,6 +24,8 @@ export interface Message {
   isError?: boolean;
   retryText?: string;
   isPlan?: boolean;
+  /** Resolved HITL: question shown to the user */
+  interruptQuestion?: string;
 }
 
 export interface Thread {

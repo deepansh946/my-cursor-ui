@@ -33,9 +33,7 @@ function BubbleShell({
         <button
           type="button"
           onClick={onCopy}
-          className={`absolute top-1.5 p-1 rounded-[var(--radius-sm)] opacity-0 group-hover/bubble:opacity-100 transition-opacity text-muted-foreground hover:text-foreground bg-surface-raised border border-border ${
-            isHuman ? "left-1.5" : "right-1.5"
-          }`}
+          className="absolute top-1.5 right-1.5 p-1 rounded-[var(--radius-sm)] opacity-0 group-hover/bubble:opacity-100 transition-opacity text-muted-foreground hover:text-foreground bg-surface-raised border border-border"
           aria-label="Copy message"
         >
           {copied ? <Check size={12} /> : <Copy size={12} />}
@@ -171,6 +169,37 @@ export function ChatMessage({
   }, []);
 
   const spacing = isContinuation ? "pb-1" : inlineTool ? "pb-1" : "pb-2";
+
+  if (message.type === "interrupt") {
+    const displayAnswer =
+      message.content === "yes"
+        ? "Approved"
+        : message.content === "no"
+          ? "Rejected"
+          : message.content;
+    return (
+      <div className={`w-full max-w-2xl mx-auto px-8 sm:px-10 ${spacing}`}>
+        <div className="rounded-[var(--radius)] border border-primary/30 bg-surface overflow-hidden">
+          <div className="px-4 py-2 border-b border-border bg-surface-raised">
+            <span className="text-xs font-medium text-primary uppercase tracking-wide">
+              Your choice
+            </span>
+          </div>
+          <div className="px-4 py-3 flex flex-col gap-2">
+            {message.interruptQuestion && (
+              <p className="text-sm text-foreground-secondary leading-relaxed">
+                {message.interruptQuestion}
+              </p>
+            )}
+            <p className="text-sm text-foreground">
+              <span className="text-foreground-faint">Selected · </span>
+              {displayAnswer}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (message.isPlan) {
     return (

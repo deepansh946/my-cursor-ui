@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { LandingNav } from "./components/landing/LandingNav";
 import { Hero } from "./components/landing/Hero";
 import { Features } from "./components/landing/Features";
-import { DemoVideo } from "./components/landing/DemoVideo";
+import { TryDemo } from "./components/landing/TryDemo";
 import { GetStartedCta } from "./components/landing/GetStartedCta";
 
 const btnLg =
@@ -14,24 +15,33 @@ export default function Home() {
       <main className="flex-1">
         <Hero />
         <Features />
-        <DemoVideo />
+        <TryDemo />
         <section className="mx-auto max-w-5xl px-6 py-16 border-t border-border">
           <div className="flex flex-col items-center gap-4 text-center">
             <h2 className="text-lg font-semibold tracking-tight text-foreground">
-              Ready to try Piper?
+              Ready to work in your repos?
             </h2>
             <p className="text-sm text-muted-foreground max-w-md">
-              Connect GitHub and start chatting with your codebase in minutes.
+              Connect GitHub for your own codebases, or start with the public
+              demo first.
             </p>
-            <GetStartedCta
-              className={`${btnLg} bg-primary text-background border border-primary hover:bg-[var(--primary-hover)]`}
-            />
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <GetStartedCta
+                className={`${btnLg} bg-primary text-background border border-primary hover:bg-[var(--primary-hover)]`}
+              />
+              <Link
+                href="/demo"
+                className={`${btnLg} bg-transparent text-foreground border border-border hover:bg-surface-raised`}
+              >
+                Try Demo
+              </Link>
+            </div>
           </div>
         </section>
       </main>
       <footer className="border-t border-border py-6">
         <p className="text-center text-xs text-muted-foreground">
-          Piper — AI coding assistant
+          Piper — plan, choose, and ship with an agent you control
         </p>
       </footer>
     </div>

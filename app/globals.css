@@ -70,6 +70,20 @@ body {
   animation: msg-in 0.15s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
+@keyframes spotlight {
+  0% {
+    opacity: 0;
+    transform: translate(-72%, -62%) scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -40%) scale(1);
+  }
+}
+.animate-spotlight {
+  animation: spotlight 2s cubic-bezier(0.25, 1, 0.5, 1) 0.2s forwards;
+}
+
 /* Sidebar thread row */
 .thread-row {
   border-left: 2px solid transparent;
@@ -96,6 +110,11 @@ body {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
+  }
+  .animate-spotlight {
+    animation: none !important;
+    opacity: 0.6 !important;
+    transform: translate(-50%, -40%) scale(1) !important;
   }
 }
 
