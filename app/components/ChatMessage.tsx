@@ -29,11 +29,13 @@ function BubbleShell({
 }) {
   return (
     <div className="relative group/bubble">
-      {!isHuman && onCopy && (
+      {onCopy && (
         <button
           type="button"
           onClick={onCopy}
-          className="absolute top-1.5 right-1.5 p-1 rounded-[var(--radius-sm)] opacity-0 group-hover/bubble:opacity-100 transition-opacity text-muted-foreground hover:text-foreground bg-surface-raised border border-border"
+          className={`absolute top-1.5 p-1 rounded-[var(--radius-sm)] opacity-0 group-hover/bubble:opacity-100 transition-opacity text-muted-foreground hover:text-foreground bg-surface-raised border border-border ${
+            isHuman ? "left-1.5" : "right-1.5"
+          }`}
           aria-label="Copy message"
         >
           {copied ? <Check size={12} /> : <Copy size={12} />}
@@ -153,11 +155,14 @@ export function ChatMessage({
   const effectiveRetry = message.retryText ?? retryText;
 
   const copyContent = useCallback(() => {
-    navigator.clipboard.writeText(message.content);
+    const text = isHuman
+      ? message.content
+      : stripWorkspacePathInText(message.content);
+    navigator.clipboard.writeText(text);
     setCopied(true);
     if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
     copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
-  }, [message.content]);
+  }, [message.content, isHuman]);
 
   useEffect(() => {
     return () => {
@@ -254,7 +259,7 @@ export function ChatMessage({
             isError={message.isError}
             content={message.content}
             isStreaming={isStreaming}
-            onCopy={!isHuman && !message.isError ? copyContent : undefined}
+            onCopy={!isStreaming && !message.isError ? copyContent : undefined}
             copied={copied}
           />
         )}

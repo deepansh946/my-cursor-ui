@@ -17,9 +17,17 @@ const TOOL_LABELS: Record<string, string> = {
   commit_changes: "Committing changes",
   create_pr: "Creating PR",
   clone_repo: "Cloning repository",
+  web_search: "Searching web",
 };
 
-const EXPANDABLE_TOOLS = new Set(["readFile", "terminal"]);
+const EXPANDABLE_TOOLS = new Set(["readFile", "terminal", "web_search"]);
+
+/** UI shows Query + Sources only; snippets stay in the tool payload for the LLM. */
+function webSearchUiSummary(content: string): string {
+  const cut = content.search(/\n\n\*\*/);
+  if (cut !== -1) return content.slice(0, cut).trim();
+  return content.trim();
+}
 
 export function ToolBlock({
   toolName,
@@ -36,7 +44,11 @@ export function ToolBlock({
 }) {
   const [expanded, setExpanded] = useState(false);
   const displayTarget = target ? stripWorkspacePath(target) : undefined;
-  const displayContent = content ? stripWorkspacePathInText(content) : content;
+  const rawContent = content ? stripWorkspacePathInText(content) : content;
+  const displayContent =
+    toolName === "web_search" && rawContent
+      ? webSearchUiSummary(rawContent)
+      : rawContent;
   const canExpand = EXPANDABLE_TOOLS.has(toolName) && !!displayContent?.trim();
   const label = TOOL_LABELS[toolName] ?? toolName;
 

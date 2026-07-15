@@ -142,6 +142,7 @@ interface StreamContext {
   updateMessages: (updater: (prev: Message[]) => Message[]) => void;
   onUsage?: (usage: TokenUsage) => void;
   onPlanComplete?: () => void;
+  onInterrupt?: (question: string, action: string, options: string[]) => void;
 }
 
 async function processSseStream(
@@ -191,6 +192,10 @@ async function processSseStream(
           );
         });
         ctx.onPlanComplete?.();
+      } else if (chunk.type === "interrupt") {
+        const ic = chunk as { question?: unknown; action?: unknown; options?: unknown };
+        const options = Array.isArray(ic.options) ? (ic.options as string[]) : [];
+        ctx.onInterrupt?.(String(ic.question ?? ""), String(ic.action ?? ""), options);
       } else if (chunk.type === "AIMessage" || chunk.type === "AIMessageChunk") {
         const piece = contentToString(chunk.content);
         if (!piece.trim()) continue;
@@ -301,6 +306,7 @@ interface StreamChatOptions {
   onPlanComplete?: () => void;
   onDone?: () => void;
   onStreamEnd?: () => void | Promise<void>;
+  onInterrupt?: (question: string, action: string, options: string[]) => void;
 }
 
 let activeAbort: AbortController | null = null;
@@ -334,6 +340,7 @@ async function streamChat(
       updateMessages: opts.updateMessages,
       onUsage: opts.onUsage,
       onPlanComplete: opts.onPlanComplete,
+      onInterrupt: opts.onInterrupt,
     });
   } catch (err) {
     if (controller.signal.aborted) return;
@@ -375,6 +382,7 @@ export async function callApi({
   onPlanComplete,
   onDone,
   onStreamEnd,
+  onInterrupt,
 }: CallApiOptions) {
   const session = await getSession();
   await streamChat(
@@ -397,6 +405,30 @@ export async function callApi({
       onPlanComplete,
       onDone,
       onStreamEnd,
+      onInterrupt,
     },
+  );
+}
+
+export async function resumeInterrupt(
+  threadId: string,
+  answer: string,
+  repo: string | null,
+  modelId: string,
+  planMode: boolean,
+  opts: Omit<StreamChatOptions, "threadId" | "repo">,
+): Promise<void> {
+  const session = await getSession();
+  await streamChat(
+    `/thread/${encodeURIComponent(threadId)}/resume`,
+    {
+      answer,
+      repo,
+      model_id: modelId,
+      plan_mode: planMode,
+      github_token: session?.accessToken ?? "",
+    },
+    "",
+    { threadId, repo, ...opts },
   );
 }

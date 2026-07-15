@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Message, Thread, TokenUsage } from "../types";
+import { InterruptState, Message, Thread, TokenUsage } from "../types";
 import { createThread, loadThreads, saveThreads } from "../lib/storage";
 import { getThreadRepo, removeThreadRepo, saveThreadRepo } from "../lib/threadRepos";
 import { getThreadModel, removeThreadModel, saveThreadModel } from "../lib/threadModels";
@@ -12,7 +12,7 @@ import {
   markThreadCloned,
   removeThreadCloned,
 } from "../lib/threadClone";
-import { callApi, cloneRepo, deleteThread, fetchThreadMessages, abortStream } from "../services/chat";
+import { callApi, cloneRepo, deleteThread, fetchThreadMessages, abortStream, resumeInterrupt } from "../services/chat";
 import { loadPlanMode, savePlanMode } from "../lib/planMode";
 
 export function useChat(
@@ -36,9 +36,11 @@ export function useChat(
     typeof window !== "undefined" ? loadPlanMode() : false,
   );
   const [lastResponseWasPlan, setLastResponseWasPlan] = useState(false);
+  const [interruptState, setInterruptState] = useState<InterruptState | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const streamingMessagesRef = useRef<Message[]>([]);
+  const interruptPendingRef = useRef(false);
 
   const threadsForView = useMemo(() => {
     if (!reposHydrated && !modelsHydrated) return threads;
@@ -83,9 +85,14 @@ export function useChat(
     placeholderData: (prev) => prev,
   });
 
-  const messages = streaming ? streamingMessages : (checkpointMessages ?? []);
+  // While waiting on HITL, keep streamed messages (pending tool rows). Empty streaming list on
+  // resume would blank the chat until the next SSE chunk arrives.
+  const messages =
+    streaming || (interruptState && streamingMessages.length > 0)
+      ? streamingMessages
+      : (checkpointMessages ?? []);
   const displayMessages = useMemo(() => {
-    if (!lastResponseWasPlan || streaming) return messages;
+    if (!lastResponseWasPlan || streaming || interruptState) return messages;
     let lastAi = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].type === "AIMessage" && !messages[i].isError) {
@@ -97,7 +104,7 @@ export function useChat(
     return messages.map((m, i) =>
       i === lastAi ? { ...m, isPlan: true } : m,
     );
-  }, [messages, lastResponseWasPlan, streaming]);
+  }, [messages, lastResponseWasPlan, streaming, interruptState]);
   const tokenUsage = threadIdFromUrl ? usageByThread[threadIdFromUrl] : undefined;
 
   const handleUsage = useCallback((threadId: string, usage: TokenUsage) => {
@@ -130,12 +137,16 @@ export function useChat(
         },
       );
     }
+    // Keep streamed UI while HITL prompt is shown / about to show
+    if (interruptPendingRef.current) return;
     setStreamingMessages([]);
   }, [refetchMessages, threadIdFromUrl, queryClient]);
 
   useEffect(() => {
     setStreamingMessages([]);
     setLastResponseWasPlan(false);
+    interruptPendingRef.current = false;
+    setInterruptState(null);
   }, [threadIdFromUrl]);
 
   useEffect(() => {
@@ -310,6 +321,10 @@ export function useChat(
       onPlanComplete: () => setLastResponseWasPlan(true),
       onStreamEnd: handleStreamEnd,
       onDone: () => textareaRef.current?.focus(),
+      onInterrupt: (question, action, options) => {
+        interruptPendingRef.current = true;
+        setInterruptState({ threadId: threadIdFromUrl!, question, action, options, repo: repoForApi!, modelId: modelForApi, planMode });
+      },
     });
   };
 
@@ -336,6 +351,10 @@ export function useChat(
       onUsage: (usage) => handleUsage(threadIdFromUrl, usage),
       onStreamEnd: handleStreamEnd,
       onDone: () => textareaRef.current?.focus(),
+      onInterrupt: (question, action, options) => {
+        interruptPendingRef.current = true;
+        setInterruptState({ threadId: threadIdFromUrl!, question, action, options, repo: resolveRepo(threadIdFromUrl), modelId: resolveModel(threadIdFromUrl), planMode: false });
+      },
     });
   };
 
@@ -360,6 +379,34 @@ export function useChat(
       onPlanComplete: () => setLastResponseWasPlan(true),
       onStreamEnd: handleStreamEnd,
       onDone: () => textareaRef.current?.focus(),
+      onInterrupt: (question, action, options) => {
+        interruptPendingRef.current = true;
+        setInterruptState({ threadId: threadIdFromUrl!, question, action, options, repo: repoForApi!, modelId: modelForApi, planMode });
+      },
+    });
+  };
+
+  const resolveInterrupt = async (answer: string) => {
+    if (!interruptState) return;
+    const saved = interruptState;
+    interruptPendingRef.current = false;
+    setInterruptState(null);
+    // Seed from checkpoint only if stream list was cleared; otherwise resume on existing UI
+    if (streamingMessagesRef.current.length === 0) {
+      const base = checkpointMessages ?? [];
+      setStreamingMessages(base);
+      streamingMessagesRef.current = base;
+    }
+    setStreaming(true);
+    await resumeInterrupt(saved.threadId, answer, saved.repo, saved.modelId, saved.planMode, {
+      updateMessages: updateStreamingMessages,
+      setStreaming,
+      onUsage: (u) => handleUsage(saved.threadId, u),
+      onStreamEnd: handleStreamEnd,
+      onInterrupt: (q, a, options) => {
+        interruptPendingRef.current = true;
+        setInterruptState({ ...saved, question: q, action: a, options });
+      },
     });
   };
 
@@ -387,6 +434,8 @@ export function useChat(
     planMode,
     togglePlanMode,
     applyPlan,
+    interruptState,
+    resolveInterrupt,
     bottomRef,
     textareaRef,
     handleNewThread,

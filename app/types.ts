@@ -3,7 +3,8 @@ export type MessageType =
   | "AIMessage"
   | "AIMessageChunk"
   | "ToolMessage"
-  | "error";
+  | "error"
+  | "interrupt";
 
 export interface TokenUsage {
   input_tokens: number;
@@ -38,4 +39,14 @@ export interface LlmModel {
   id: string;
   name: string;
   description: string;
+}
+
+export interface InterruptState {
+  threadId: string;
+  question: string;
+  action: string;
+  options: string[];
+  repo: string | null;
+  modelId: string;
+  planMode: boolean;
 }

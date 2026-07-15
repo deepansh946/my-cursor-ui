@@ -10,7 +10,7 @@ import { useSelectedModel } from "../hooks/useSelectedModel";
 import { useModels } from "../hooks/useModels";
 import { Sidebar } from "./Sidebar";
 import { ChatMessage } from "./ChatMessage";
-import { Message } from "../types";
+import { InterruptState, Message } from "../types";
 import { RepoPicker } from "./RepoPicker";
 import { ModelPicker } from "./ModelPicker";
 import { RepoFileTree } from "./RepoFileTree";
@@ -25,6 +25,64 @@ import { loadWorkspaceOpen, saveWorkspaceOpen } from "../lib/workspacePanel";
 import { Button } from "./ui/Button";
 
 const PICK_REPO_KEY = "piper_pick_repo";
+
+function InterruptBar({
+  interruptState,
+  onResolve,
+}: {
+  interruptState: InterruptState;
+  onResolve: (answer: string) => void;
+}) {
+  const [freeText, setFreeText] = useState("");
+  const isBinaryAction =
+    interruptState.action === "commit" ||
+    interruptState.action === "create_pr" ||
+    (interruptState.options.length === 2 &&
+      interruptState.options[0] === "yes" &&
+      interruptState.options[1] === "no");
+
+  return (
+    <div className="w-full max-w-2xl mx-auto mb-3 rounded-[var(--radius)] border border-border bg-surface-raised p-3 flex flex-col gap-2">
+      <p className="text-sm text-foreground">{interruptState.question}</p>
+      <div className="flex items-center gap-2 flex-wrap">
+        {isBinaryAction ? (
+          <>
+            <Button size="sm" onClick={() => onResolve("yes")}>Approve</Button>
+            <Button size="sm" variant="secondary" onClick={() => onResolve("no")}>Reject</Button>
+          </>
+        ) : interruptState.options.length > 0 ? (
+          interruptState.options.map((opt) => (
+            <Button key={opt} size="sm" variant="secondary" onClick={() => onResolve(opt)}>
+              {opt}
+            </Button>
+          ))
+        ) : (
+          <>
+            <input
+              className="flex-1 text-sm bg-transparent border border-border rounded px-2 py-1 focus:outline-none focus:border-primary"
+              value={freeText}
+              onChange={(e) => setFreeText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && freeText.trim()) {
+                  onResolve(freeText.trim());
+                  setFreeText("");
+                }
+              }}
+              placeholder="Type your answer…"
+            />
+            <Button
+              size="sm"
+              disabled={!freeText.trim()}
+              onClick={() => { onResolve(freeText.trim()); setFreeText(""); }}
+            >
+              Send
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function lastHumanText(messages: Message[], beforeIndex: number): string | undefined {
   for (let j = beforeIndex - 1; j >= 0; j--) {
@@ -98,6 +156,8 @@ export function ChatShell({
     planMode,
     togglePlanMode,
     applyPlan,
+    interruptState,
+    resolveInterrupt,
   } = useChat(
     threadIdFromUrl,
     selectedRepo,
@@ -267,6 +327,17 @@ export function ChatShell({
     void signOut({ callbackUrl: "/login" });
   }, []);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (!streaming) togglePlanMode(!planMode);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [planMode, streaming, togglePlanMode]);
+
   const emptyTitle = currentThread ? threadDisplayTitle(currentThread) : "New chat";
 
   return (
@@ -401,6 +472,12 @@ export function ChatShell({
 
           {hasThread && (
             <footer className="px-8 sm:px-10 py-4 shrink-0 border-t border-border">
+              {interruptState && (
+                <InterruptBar
+                  interruptState={interruptState}
+                  onResolve={resolveInterrupt}
+                />
+              )}
               <div className="flex w-full max-w-2xl mx-auto items-end gap-2 rounded-[var(--radius)] border border-border bg-surface p-2 focus-within:border-primary transition-[border-color] duration-150">
                 <textarea
                   ref={textareaRef}
@@ -432,30 +509,23 @@ export function ChatShell({
                 </Button>
               </div>
               <div className="flex w-full max-w-2xl mx-auto mt-2 items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Button
-                    size="sm"
-                    variant={planMode ? "default" : "secondary"}
-                    onClick={() => togglePlanMode(!planMode)}
-                    disabled={streaming}
-                  >
-                    {planMode ? "Plan Mode ON" : "Plan"}
-                  </Button>
-                  <p className="text-[11px] font-data text-foreground-faint truncate">
-                    {activeModelName}
-                    {activeRepo && (
-                      <>
-                        {" · "}
-                        {activeRepo}
-                      </>
-                    )}
-                  </p>
-                </div>
+                <Button
+                  size="sm"
+                  variant={planMode ? "default" : "secondary"}
+                  onClick={() => togglePlanMode(!planMode)}
+                  disabled={streaming}
+                  className="gap-1.5"
+                  title="Toggle plan mode"
+                >
+                  {planMode ? "Plan Mode ON" : "Plan Mode"}
+                  <kbd className="text-[10px] font-data opacity-60 border border-current/20 rounded px-1 py-px">
+                    ⌘K
+                  </kbd>
+                </Button>
                 <p className="text-xs text-muted-foreground shrink-0">
                   {tokenUsage && (
                     <span className="font-data text-foreground-faint">
-                      {" "}
-                      · {tokenUsage.input_tokens.toLocaleString()} in ·{" "}
+                      {tokenUsage.input_tokens.toLocaleString()} in ·{" "}
                       {tokenUsage.output_tokens.toLocaleString()} out ·{" "}
                       {tokenUsage.total_tokens.toLocaleString()} total
                     </span>
