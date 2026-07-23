@@ -1,0 +1,1 @@
+Piper — repo-aware AI coding agent. Plan the work. Choose the path. Ship with control.
